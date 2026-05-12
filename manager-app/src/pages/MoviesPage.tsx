@@ -1,9 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useCategories, useMovies, useSaveMovie, useTags } from "../lib/queries";
-
-function uid(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import { generateId } from "../lib/id";
 
 export function MoviesPage() {
   const movies = useMovies();
@@ -27,7 +24,7 @@ export function MoviesPage() {
     }
 
     await saveMovie.mutateAsync({
-      id: uid("m"),
+      id: generateId("m"),
       title: title.trim(),
       description: "Mô tả đang cập nhật",
       thumbnail: "https://placehold.co/300x200",

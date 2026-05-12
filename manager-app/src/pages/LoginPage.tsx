@@ -1,10 +1,17 @@
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const auth = useAuth();
 
-  const onSuccess = (_credential: CredentialResponse) => {
+  const onSuccess = (credential: CredentialResponse) => {
+    if (!credential.credential) {
+      return;
+    }
+
+    auth.signIn(credential.credential);
     navigate("/");
   };
 

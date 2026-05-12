@@ -8,21 +8,40 @@ struct StreamValidationResult {
 
 #[tauri::command]
 fn validate_stream_link(link: &str) -> StreamValidationResult {
-    let lower_link = link.to_lowercase();
-    let supported = (lower_link.starts_with("http://") || lower_link.starts_with("https://"))
-        && (lower_link.ends_with(".m3u8")
-            || lower_link.contains("hls")
-            || lower_link.contains("playlist"));
+    let is_supported = link
+        .parse::<http::Uri>()
+        .ok()
+        .and_then(|uri| {
+            let scheme = uri.scheme_str()?;
+            if scheme != "http" && scheme != "https" {
+                return None;
+            }
+
+            Some(
+                uri.path()
+                    .to_lowercase()
+                    .ends_with(".m3u8")
+                    || uri.path().to_lowercase().ends_with(".mpd"),
+            )
+        })
+        .unwrap_or(false);
 
     StreamValidationResult {
         link: link.to_string(),
-        is_supported: supported,
+        is_supported,
     }
 }
 
 #[tauri::command]
 fn build_google_oauth_redirect() -> String {
-    "https://accounts.google.com/o/oauth2/v2/auth".to_string()
+    let client_id = std::env::var("GOOGLE_OAUTH_CLIENT_ID").unwrap_or_default();
+    let redirect_uri = std::env::var("GOOGLE_OAUTH_REDIRECT_URI")
+        .unwrap_or_else(|_| "http://localhost/oauth/callback".to_string());
+
+    format!(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=token&scope=openid%20email%20profile",
+        client_id, redirect_uri
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

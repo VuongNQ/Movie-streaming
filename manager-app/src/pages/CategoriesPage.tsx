@@ -1,9 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useCategories, useSaveCategory, useSaveTag, useTags } from "../lib/queries";
-
-function uid(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
-}
+import { generateId } from "../lib/id";
 
 export function CategoriesPage() {
   const categories = useCategories();
@@ -19,7 +16,7 @@ export function CategoriesPage() {
       return;
     }
 
-    await saveCategory.mutateAsync({ id: uid("c"), name: categoryName.trim() });
+    await saveCategory.mutateAsync({ id: generateId("c"), name: categoryName.trim() });
     setCategoryName("");
   };
 
@@ -29,7 +26,7 @@ export function CategoriesPage() {
       return;
     }
 
-    await saveTag.mutateAsync({ id: uid("t"), name: tagName.trim() });
+    await saveTag.mutateAsync({ id: generateId("t"), name: tagName.trim() });
     setTagName("");
   };
 

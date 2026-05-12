@@ -21,6 +21,7 @@ export type Movie = {
 };
 
 export type AndroidVersionPolicy = {
+  id?: string;
   latestVersion: string;
   forceVersion: string;
   highlightMessage: string;
