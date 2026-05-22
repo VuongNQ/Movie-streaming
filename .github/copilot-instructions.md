@@ -33,10 +33,12 @@ cd android-app-tv
 
 ## High-level architecture
 
-- The repository currently has two active applications:
-  - `admin-dashboard`: React 19 + TypeScript + Vite SPA for admin operations.
-  - `android-app-tv`: Kotlin + Android Leanback TV client.
-- Both apps are built around the same Firestore backend contract from `README.md` and `.github/instructions/*`:
+- Product architecture in README is a **3-component system**:
+  - `android-app-tv`: TV playback app (Kotlin/Leanback), consumer-facing playback.
+  - `admin-dashboard`: React SPA for admin movie/user control.
+  - `extension`/`extensions` (when present): Chromium extension (vanilla JS) to capture stream links and send/update data for admin workflows.
+- Current repository code is active in `admin-dashboard` and `android-app-tv`; data contract and security instructions already cover extension flows and should be followed when extension code is added/updated.
+- All components are designed around one Firestore contract:
   - `movies`
   - `users`
   - `users/{uid}/devices`
@@ -54,6 +56,15 @@ cd android-app-tv
 ## Key conventions specific to this repo
 
 - **Treat Firestore schema in `.github/instructions/project-data-contract.instructions.md` as canonical.** Keep names and enum values exact (snake_case fields like `thumbnail_link`, `created_at`, `tracking_history`).
+- **Keep README movie model semantics intact across all apps**:
+  - Movie identity: stable `id` derived from title + UUID pattern.
+  - Movie fields include: title, description, thumbnail/background links, optional YouTube trailer link.
+  - Movie taxonomy: `type` in `single_movie | tv_series | franchise`; genre tags; actor tags; audio tags (`dubbing`/`subtitle`).
+  - Stream entries contain `server_name`, stream `link`, stream `type`, stream `status` (`live`/`dead`), and metadata (e.g., m3u8/HLS details).
+- **Role behavior must match README and security rules**:
+  - `guest`: can browse but must not persist playlist/tracking.
+  - `user`: has per-device playlist and watch tracking under `users/{uid}/devices`.
+  - `admin`: full management for movies and users.
 - **Do not bypass the service layer in admin-dashboard.** UI pages should use `lib/queries.ts` hooks, and hooks call `lib/firestore.ts`; avoid direct Firestore calls from page/components.
 - **Keep auth and role checks layered, not UI-only.** Follow current pattern: route guard + Zustand auth role state + backend/rules alignment.
 - **React Query key strategy is centralized in `queryKeys` (`lib/queries.ts`).** Reuse these keys and invalidate by key family instead of ad-hoc strings.

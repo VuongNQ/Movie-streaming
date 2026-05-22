@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { useAuthStore } from '../lib/store'
 import { Button } from '../components/ui/button'
@@ -17,15 +19,37 @@ type LoginInput = z.infer<typeof loginSchema>
 export function LoginPage() {
   const login = useAuthStore((state) => state.login)
   const loading = useAuthStore((state) => state.loading)
+  const user = useAuthStore((state) => state.user)
+  const initialized = useAuthStore((state) => state.initialized)
+  const navigate = useNavigate()
 
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   })
+
+  useEffect(() => {
+    if (initialized && user) {
+      navigate('/', { replace: true })
+    }
+  }, [user, initialized, navigate])
+
+  if (initialized && user) {
+    return <Navigate to="/" replace />
+  }
+
+  async function onSubmit(values: LoginInput) {
+    try {
+      await login(values.email, values.password)
+    } catch {
+      setError('root', { message: 'Invalid email or password.' })
+    }
+  }
 
   return (
     <div className="grid min-h-screen place-items-center px-4">
@@ -36,7 +60,7 @@ export function LoginPage() {
         </CardHeader>
 
         <CardContent>
-          <form className="grid gap-4" onSubmit={handleSubmit((values) => login(values.email, values.password))}>
+          <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="admin@movie-streaming.com" {...register('email')} />
@@ -48,6 +72,8 @@ export function LoginPage() {
               <Input id="password" type="password" {...register('password')} />
               {errors.password ? <small className="text-xs text-red-600">{errors.password.message}</small> : null}
             </div>
+
+            {errors.root ? <small className="text-xs text-red-600">{errors.root.message}</small> : null}
 
             <Button type="submit" disabled={loading} className="mt-2 w-full">
               {loading ? 'Signing in...' : 'Sign in'}

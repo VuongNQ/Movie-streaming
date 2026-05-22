@@ -65,8 +65,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ loading: true })
     try {
       await signInWithEmailAndPassword(auth, email, password)
-    } finally {
+    } catch (error) {
       set({ loading: false })
+      throw error
     }
   },
 
