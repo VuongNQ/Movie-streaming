@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { firestore } from './firestore'
+import type { MovieInput } from '../types'
 
 export const queryKeys = {
   moviesList: ['movies', 'list'] as const,
@@ -14,6 +15,31 @@ export function useMovies() {
     queryKey: queryKeys.moviesList,
     queryFn: firestore.getMovies,
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useCreateMovie() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: MovieInput) => firestore.createMovie(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.moviesList })
+    },
+  })
+}
+
+export function useUpdateMovie() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: MovieInput }) => firestore.updateMovie(id, payload),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.moviesList }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.movieById(variables.id) }),
+      ])
+    },
   })
 }
 

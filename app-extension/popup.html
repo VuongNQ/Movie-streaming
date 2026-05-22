@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>m3u8 Capture</title>
+  </head>
+  <body>
+    <main class="popup">
+      <header>
+        <h1>m3u8 Capture</h1>
+      </header>
+
+      <section class="controls">
+        <button id="startCapture" type="button">Start capture</button>
+        <button id="stopCapture" type="button" class="muted">Stop capture</button>
+      </section>
+
+      <section class="mode-row">
+        <label for="modeSelect">Display mode</label>
+        <select id="modeSelect">
+          <option value="latest">latest</option>
+          <option value="history">history</option>
+        </select>
+      </section>
+
+      <p id="statusText" class="status">Idle</p>
+      <p id="feedbackText" class="feedback" aria-live="polite"></p>
+
+      <section>
+        <h2>Detected links</h2>
+        <div id="linksContainer" class="links"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/popup/popup.ts"></script>
+  </body>
+</html>

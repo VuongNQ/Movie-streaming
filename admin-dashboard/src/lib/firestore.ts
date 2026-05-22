@@ -13,6 +13,17 @@ import { Timestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import type { Device, DeviceInput, Movie, MovieInput, User } from '../types'
 
+function buildMovieId(title: string): string {
+  const randomSuffix = doc(collection(db, 'movies')).id
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+
+  return `${slug || 'movie'}-${randomSuffix}`
+}
+
 function toIsoString(value: unknown): string {
   if (typeof value === 'string') {
     return value
@@ -27,6 +38,29 @@ function toIsoString(value: unknown): string {
   }
 
   return new Date().toISOString()
+}
+
+function stripUndefinedValues<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedValues(item)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    const output: Record<string, unknown> = {}
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      if (nestedValue === undefined) {
+        continue
+      }
+
+      output[key] = stripUndefinedValues(nestedValue)
+    }
+
+    return output as T
+  }
+
+  return value
 }
 
 export const firestore = {
@@ -46,13 +80,15 @@ export const firestore = {
   },
 
   async createMovie(payload: MovieInput): Promise<Movie> {
-    const id = crypto.randomUUID()
-    await setDoc(doc(db, 'movies', id), { ...payload, id })
+    const id = buildMovieId(payload.title)
+    const firestorePayload = stripUndefinedValues({ ...payload, id })
+    await setDoc(doc(db, 'movies', id), firestorePayload)
     return { ...payload, id }
   },
 
   async updateMovie(id: string, payload: Partial<MovieInput>): Promise<void> {
-    await updateDoc(doc(db, 'movies', id), payload)
+    const firestorePayload = stripUndefinedValues(payload)
+    await updateDoc(doc(db, 'movies', id), firestorePayload)
   },
 
   async deleteMovie(id: string): Promise<void> {
