@@ -17,3 +17,8 @@ const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 export const db = getFirestore(app, firestoreDatabaseId)
+
+export const firebaseRuntimeConfig = {
+  projectId: firebaseConfig.projectId || 'unknown',
+  databaseId: firestoreDatabaseId,
+}

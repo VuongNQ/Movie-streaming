@@ -10,8 +10,27 @@ import {
   deleteDoc,
 } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
-import { db } from './firebase'
-import type { Device, DeviceInput, Movie, MovieInput, User } from '../types'
+import { db, firebaseRuntimeConfig } from './firebase'
+import type { AuthPreflightDiagnostic, Device, DeviceInput, Movie, MovieInput, User } from '../types'
+
+function mapFirestoreWriteError(error: unknown): Error {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === 'permission-denied'
+  ) {
+    return new Error(
+      `Missing or insufficient permissions. Verify Firestore rules for movies writes and confirm admin role in users/{uid}. Runtime target: project=${firebaseRuntimeConfig.projectId}, database=${firebaseRuntimeConfig.databaseId}.`,
+    )
+  }
+
+  if (error instanceof Error) {
+    return error
+  }
+
+  return new Error('Firestore write failed.')
+}
 
 function buildMovieId(title: string): string {
   const randomSuffix = doc(collection(db, 'movies')).id
@@ -82,13 +101,22 @@ export const firestore = {
   async createMovie(payload: MovieInput): Promise<Movie> {
     const id = buildMovieId(payload.title)
     const firestorePayload = stripUndefinedValues({ ...payload, id })
-    await setDoc(doc(db, 'movies', id), firestorePayload)
+    try {
+      await setDoc(doc(db, 'movies', id), firestorePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
     return { ...payload, id }
   },
 
   async updateMovie(id: string, payload: Partial<MovieInput>): Promise<void> {
-    const firestorePayload = stripUndefinedValues(payload)
-    await updateDoc(doc(db, 'movies', id), firestorePayload)
+    // Keep doc id in the stored payload so strict movie rules can validate updates.
+    const firestorePayload = stripUndefinedValues({ ...payload, id })
+    try {
+      await updateDoc(doc(db, 'movies', id), firestorePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
   },
 
   async deleteMovie(id: string): Promise<void> {
@@ -133,5 +161,28 @@ export const firestore = {
       id: entry.id,
       ...(entry.data() as DeviceInput),
     }))
+  },
+
+  async getAuthPreflight(uid: string): Promise<AuthPreflightDiagnostic> {
+    const snapshot = await getDoc(doc(db, 'users', uid))
+
+    if (!snapshot.exists()) {
+      return {
+        uid,
+        user_doc_exists: false,
+        role_in_user_doc: null,
+        is_admin_by_user_doc: false,
+      }
+    }
+
+    const roleValue = snapshot.data().role
+    const role = typeof roleValue === 'string' ? roleValue : null
+
+    return {
+      uid,
+      user_doc_exists: true,
+      role_in_user_doc: role,
+      is_admin_by_user_doc: role === 'admin',
+    }
   },
 }

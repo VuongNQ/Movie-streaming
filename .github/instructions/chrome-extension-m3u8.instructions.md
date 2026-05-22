@@ -1,7 +1,7 @@
 ---
 description: "Use when building or updating a Chrome extension that captures m3u8 links from the active tab network traffic and provides show/copy actions in the UI. Covers MV3 architecture, permissions, and UX behavior."
 name: "Chrome Extension m3u8 Capture"
-applyTo: "{extension/**,extensions/**,chrome-extension/**}"
+applyTo: "{app-extension/**,extension/**,extensions/**,chrome-extension/**}"
 ---
 # Chrome Extension m3u8 Capture Guidelines
 
@@ -20,17 +20,24 @@ applyTo: "{extension/**,extensions/**,chrome-extension/**}"
     - `history`: show latest first with a short capped list (for example top 5 unique links).
   - Include a dedicated `Copy link` action that writes to clipboard and reports success/failure feedback.
   - Provide a clear empty state when no m3u8 link has been detected.
+  - Optionally display advanced metadata extracted from link URL and response headers:
+    - Resolution (e.g., 720p, 1080p) extracted from URL query parameters or path patterns.
+    - Bandwidth/bitrate information when available in URL parameters.
+    - Codec information from Content-Type headers.
+    - Page metadata (og:title, og:description, og:image) extracted via content script for UI context.
 
 - Required extension wiring:
   - `manifest.json` must include only the minimum permissions needed for tab-scoped monitoring.
   - Keep host permissions scoped as narrowly as possible.
   - Keep debugger attach/detach lifecycle explicit so capture starts and stops with user intent.
   - Use message passing between popup and service worker for data retrieval and updates.
-  - Avoid injecting page scripts unless strictly required for the capture strategy.
+  - Minimize page script injection: use content scripts only to read page metadata (og:* tags) when required for link context.
 
 - Reliability and safety:
   - Deduplicate identical URLs to avoid noisy UI updates.
+  - Deduplicate based on both URL and tab URL (or page context) to distinguish same stream on different pages.
   - Handle service worker restarts by restoring last known link from extension storage when appropriate.
+  - Track capture count and timestamps (first seen, last seen) for each unique link.
   - Never log sensitive headers, cookies, or request bodies.
   - Keep error handling user-visible for copy failures and listener attach failures.
 

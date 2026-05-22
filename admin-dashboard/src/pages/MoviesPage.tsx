@@ -3,15 +3,66 @@ import { MovieDetailsForm } from '../components/forms/MovieDetailsForm'
 import { Badge } from '../components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import { firebaseRuntimeConfig } from '../lib/firebase'
 import { emptyMovieFormInput, movieToFormInput } from '../lib/movieForm'
-import { useCreateMovie, useMovies, useUpdateMovie } from '../lib/queries'
+import { useAuthPreflight, useCreateMovie, useMovies, useUpdateMovie } from '../lib/queries'
+import { useAuthStore } from '../lib/store'
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return 'Unknown error'
+}
 
 export function MoviesPage() {
   const { data, isLoading, error } = useMovies()
   const createMovie = useCreateMovie()
   const updateMovie = useUpdateMovie()
+  const user = useAuthStore((state) => state.user)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null)
+  const permissionError = [createMovie.error, updateMovie.error].find(
+    (candidate) =>
+      candidate instanceof Error &&
+      (candidate.message.includes('Missing or insufficient permissions') || candidate.message.includes('permission-denied')),
+  )
+  const authPreflight = useAuthPreflight(user?.uid ?? '', Boolean(user?.uid) && Boolean(permissionError))
+
+  const preflightSummary = user?.uid
+    ? authPreflight.isLoading
+      ? 'checking users/{uid} document...'
+      : authPreflight.isError
+        ? 'failed to read users/{uid} document.'
+        : authPreflight.data
+          ? `user_doc_exists=${String(authPreflight.data.user_doc_exists)}, role_in_user_doc=${authPreflight.data.role_in_user_doc ?? 'null'}, is_admin_by_user_doc=${String(authPreflight.data.is_admin_by_user_doc)}`
+          : 'not checked'
+    : 'not signed in'
+
+  const diagnosticsText = permissionError
+    ? [
+        'Movie save permission diagnostics',
+        `error: ${getErrorMessage(permissionError)}`,
+        `uid: ${user?.uid ?? 'not signed in'}`,
+        `role: ${user?.role ?? 'unknown'}`,
+        `auth preflight: ${preflightSummary}`,
+        `firebase project: ${firebaseRuntimeConfig.projectId}`,
+        `firestore database: ${firebaseRuntimeConfig.databaseId}`,
+      ].join('\n')
+    : ''
+
+  async function copyDiagnostics(): Promise<void> {
+    if (!diagnosticsText || !navigator.clipboard) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(diagnosticsText)
+    } catch {
+      // Clipboard write can fail in restricted contexts; keep this non-blocking.
+    }
+  }
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading movies...</p>
@@ -32,6 +83,29 @@ export function MoviesPage() {
           {showCreateForm ? 'Hide form' : 'Add movie'}
         </Button>
       </div>
+
+      {permissionError ? (
+        <Card className="border-red-300 bg-red-50/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-red-700">Permission diagnostics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0 text-sm text-red-700">
+            <p>{getErrorMessage(permissionError)}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>uid: {user?.uid ?? 'not signed in'}</li>
+              <li>role: {user?.role ?? 'unknown'}</li>
+              <li>auth preflight: {preflightSummary}</li>
+              <li>firebase project: {firebaseRuntimeConfig.projectId}</li>
+              <li>firestore database: {firebaseRuntimeConfig.databaseId}</li>
+            </ul>
+            <div>
+              <Button type="button" size="sm" variant="outline" onClick={copyDiagnostics}>
+                Copy diagnostics
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {showCreateForm ? (
         <Card>

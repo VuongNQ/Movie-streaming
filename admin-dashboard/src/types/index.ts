@@ -55,3 +55,10 @@ export interface Device {
 }
 
 export type DeviceInput = Omit<Device, 'id'>
+
+export interface AuthPreflightDiagnostic {
+  uid: string
+  user_doc_exists: boolean
+  role_in_user_doc: string | null
+  is_admin_by_user_doc: boolean
+}

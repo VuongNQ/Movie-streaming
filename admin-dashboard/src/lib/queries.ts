@@ -8,6 +8,7 @@ export const queryKeys = {
   usersList: ['users', 'list'] as const,
   userById: (uid: string) => ['users', uid] as const,
   devicesByUser: (uid: string) => ['users', uid, 'devices'] as const,
+  authPreflight: (uid: string) => ['users', uid, 'auth-preflight'] as const,
 }
 
 export function useMovies() {
@@ -56,5 +57,14 @@ export function useDevices(uid: string) {
     queryKey: queryKeys.devicesByUser(uid),
     queryFn: () => firestore.getDevices(uid),
     enabled: Boolean(uid),
+  })
+}
+
+export function useAuthPreflight(uid: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.authPreflight(uid),
+    queryFn: () => firestore.getAuthPreflight(uid),
+    enabled: enabled && Boolean(uid),
+    retry: false,
   })
 }
