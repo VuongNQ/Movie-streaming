@@ -27,6 +27,8 @@ export interface Movie {
   audio_types: AudioType[]
   genres: string[]
   stream_connections: StreamConnection[]
+  created_at?: string
+  last_updated?: string
   youtube_trailer_link?: string
 }
 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { firebaseRuntimeConfig } from '../lib/firebase'
 import { emptyMovieFormInput, movieToFormInput } from '../lib/movieForm'
-import { useAuthPreflight, useCreateMovie, useMovies, useUpdateMovie } from '../lib/queries'
+import { useAuthPreflight, useCreateMovie, useDeleteMovie, useMovies, useUpdateMovie } from '../lib/queries'
 import { useAuthStore } from '../lib/store'
 
 function getErrorMessage(error: unknown): string {
@@ -16,14 +16,28 @@ function getErrorMessage(error: unknown): string {
   return 'Unknown error'
 }
 
+function formatDateLabel(value?: string): string | null {
+  if (!value) {
+    return null
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return parsed.toLocaleString()
+}
+
 export function MoviesPage() {
   const { data, isLoading, error } = useMovies()
   const createMovie = useCreateMovie()
   const updateMovie = useUpdateMovie()
+  const deleteMovie = useDeleteMovie()
   const user = useAuthStore((state) => state.user)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null)
-  const permissionError = [createMovie.error, updateMovie.error].find(
+  const permissionError = [createMovie.error, updateMovie.error, deleteMovie.error].find(
     (candidate) =>
       candidate instanceof Error &&
       (candidate.message.includes('Missing or insufficient permissions') || candidate.message.includes('permission-denied')),
@@ -61,6 +75,19 @@ export function MoviesPage() {
       await navigator.clipboard.writeText(diagnosticsText)
     } catch {
       // Clipboard write can fail in restricted contexts; keep this non-blocking.
+    }
+  }
+
+  async function handleRemoveMovie(id: string, title: string): Promise<void> {
+    const isConfirmed = window.confirm(`Remove movie "${title}" from list?`)
+    if (!isConfirmed) {
+      return
+    }
+
+    await deleteMovie.mutateAsync(id)
+
+    if (editingMovieId === id) {
+      setEditingMovieId(null)
     }
   }
 
@@ -142,16 +169,61 @@ export function MoviesPage() {
       <div className="grid gap-3">
         {movies.map((movie) => (
           <Card key={movie.id} className="border-border/80 shadow-none">
-            <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="text-base">{movie.title}</CardTitle>
-              <Badge variant="secondary">{movie.type}</Badge>
+            <CardHeader className="pb-3">
+              <div className="flex items-start gap-4">
+                <div className="h-auto max-h-48 w-32 shrink-0 overflow-hidden rounded-md border bg-muted">
+                  <img
+                    src={movie.thumbnail_link}
+                    alt={`${movie.title} thumbnail`}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none'
+                    }}
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <CardTitle className="text-base">{movie.title}</CardTitle>
+                    <Badge variant="secondary">{movie.type}</Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                    <span className="min-w-0 flex-1 line-clamp-3">{movie.description || 'No description'}</span>
+                    <span className="shrink-0">{movie.year}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {movie.genres.length > 0
+                      ? movie.genres.map((genre) => (
+                          <Badge key={`${movie.id}-genre-${genre}`} variant="secondary">
+                            {genre}
+                          </Badge>
+                        ))
+                      : null}
+
+                    {movie.stream_connections.length > 0 ? (
+                      Array.from(new Set(movie.stream_connections.map((stream) => stream.server_name))).map((serverName) => (
+                        <Badge key={`${movie.id}-${serverName}`} variant="outline">
+                          {serverName}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="outline">No streams</Badge>
+                    )}
+                  </div>
+
+                  {formatDateLabel(movie.created_at) || formatDateLabel(movie.last_updated) ? (
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      {formatDateLabel(movie.created_at) ? <span>Created: {formatDateLabel(movie.created_at)}</span> : null}
+                      {formatDateLabel(movie.last_updated) ? <span>Last updated: {formatDateLabel(movie.last_updated)}</span> : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3 pt-0">
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>{movie.description || 'No description'}</span>
-                <span>{movie.year}</span>
-              </div>
-
               {editingMovieId === movie.id ? (
                 <MovieDetailsForm
                   idPrefix={`movie-${movie.id}`}
@@ -165,9 +237,22 @@ export function MoviesPage() {
                   onCancel={() => setEditingMovieId(null)}
                 />
               ) : (
-                <Button type="button" variant="outline" size="sm" onClick={() => setEditingMovieId(movie.id)}>
-                  Edit details
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditingMovieId(movie.id)}>
+                    Edit details
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={deleteMovie.isPending}
+                    onClick={() => {
+                      void handleRemoveMovie(movie.id, movie.title)
+                    }}
+                  >
+                    {deleteMovie.isPending ? 'Removing...' : 'Remove'}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -1,6 +1,28 @@
 import { z } from 'zod'
 import type { Movie, MovieInput } from '../types'
 
+export const movieGenreOptions = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
+  'Music',
+  'Mystery',
+  'Romance',
+  'Science Fiction',
+  'TV Movie',
+  'Thriller',
+  'War',
+  'Western',
+] as const
+
 const movieTypeSchema = z.enum(['single_movie', 'tv_series', 'franchise'])
 const audioTypeSchema = z.enum(['dubbing', 'subtitle'])
 const streamStatusSchema = z.enum(['live', 'dead'])
@@ -59,7 +81,7 @@ export const movieFormSchema = z
     year: z.coerce.number().int('Year must be an integer.').min(1888, 'Year is invalid.').max(3000, 'Year is invalid.'),
     episode_count: z.coerce.number().int('Episode count must be an integer.').min(1, 'Episode count must be at least 1.'),
     actors_csv: z.string().default(''),
-    genres_csv: z.string().default(''),
+    genres: z.array(z.string().trim().min(1)).default([]),
     audio_types: z.array(audioTypeSchema).default([]),
     youtube_trailer_link: z.string().trim().default(''),
     stream_connections: z.array(streamConnectionFormSchema).default([]),
@@ -117,7 +139,7 @@ export const movieFormSchema = z
       episode_count: value.episode_count,
       actors: parseCommaList(value.actors_csv),
       audio_types: value.audio_types,
-      genres: parseCommaList(value.genres_csv),
+      genres: value.genres,
       stream_connections: validStreamConnections,
     }
 
@@ -140,7 +162,7 @@ export function movieToFormInput(movie: Movie): MovieFormInput {
     year: movie.year,
     episode_count: movie.episode_count,
     actors_csv: movie.actors.join(', '),
-    genres_csv: movie.genres.join(', '),
+    genres: movie.genres,
     audio_types: movie.audio_types,
     youtube_trailer_link: movie.youtube_trailer_link ?? '',
     stream_connections: movie.stream_connections.map((connection) => ({
@@ -163,7 +185,7 @@ export function emptyMovieFormInput(): MovieFormInput {
     year: new Date().getFullYear(),
     episode_count: 1,
     actors_csv: '',
-    genres_csv: '',
+    genres: [],
     audio_types: [],
     youtube_trailer_link: '',
     stream_connections: [],

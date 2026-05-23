@@ -82,10 +82,19 @@ function stripUndefinedValues<T>(value: T): T {
   return value
 }
 
+function normalizeMovieFromSnapshot(id: string, data: MovieInput): Movie {
+  return {
+    id,
+    ...data,
+    created_at: data.created_at ? toIsoString(data.created_at) : undefined,
+    last_updated: data.last_updated ? toIsoString(data.last_updated) : undefined,
+  }
+}
+
 export const firestore = {
   async getMovies(): Promise<Movie[]> {
     const snapshot = await getDocs(query(collection(db, 'movies'), orderBy('title', 'asc')))
-    return snapshot.docs.map((entry) => ({ id: entry.id, ...(entry.data() as MovieInput) }))
+    return snapshot.docs.map((entry) => normalizeMovieFromSnapshot(entry.id, entry.data() as MovieInput))
   },
 
   async getMovieById(id: string): Promise<Movie> {
@@ -95,23 +104,35 @@ export const firestore = {
       throw new Error('Movie not found')
     }
 
-    return { id: snapshot.id, ...(snapshot.data() as MovieInput) }
+    return normalizeMovieFromSnapshot(snapshot.id, snapshot.data() as MovieInput)
   },
 
   async createMovie(payload: MovieInput): Promise<Movie> {
+    const now = new Date().toISOString()
     const id = buildMovieId(payload.title)
-    const firestorePayload = stripUndefinedValues({ ...payload, id })
+    const firestorePayload = stripUndefinedValues({
+      ...payload,
+      id,
+      created_at: payload.created_at ?? now,
+      last_updated: now,
+    })
     try {
       await setDoc(doc(db, 'movies', id), firestorePayload)
     } catch (error) {
       throw mapFirestoreWriteError(error)
     }
-    return { ...payload, id }
+    return normalizeMovieFromSnapshot(id, firestorePayload as MovieInput)
   },
 
   async updateMovie(id: string, payload: Partial<MovieInput>): Promise<void> {
+    const restPayload = { ...payload }
+    delete restPayload.created_at
     // Keep doc id in the stored payload so strict movie rules can validate updates.
-    const firestorePayload = stripUndefinedValues({ ...payload, id })
+    const firestorePayload = stripUndefinedValues({
+      ...restPayload,
+      id,
+      last_updated: new Date().toISOString(),
+    })
     try {
       await updateDoc(doc(db, 'movies', id), firestorePayload)
     } catch (error) {
@@ -120,7 +141,11 @@ export const firestore = {
   },
 
   async deleteMovie(id: string): Promise<void> {
-    await deleteDoc(doc(db, 'movies', id))
+    try {
+      await deleteDoc(doc(db, 'movies', id))
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
   },
 
   async getUsers(): Promise<User[]> {

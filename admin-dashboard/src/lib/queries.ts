@@ -44,6 +44,20 @@ export function useUpdateMovie() {
   })
 }
 
+export function useDeleteMovie() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => firestore.deleteMovie(id),
+    onSuccess: async (_data, id) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.moviesList }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.movieById(id) }),
+      ])
+    },
+  })
+}
+
 export function useUsers() {
   return useQuery({
     queryKey: queryKeys.usersList,

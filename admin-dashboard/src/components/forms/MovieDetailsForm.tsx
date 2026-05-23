@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { Button } from '../ui/button'
+import { HlsPreviewDialog, type HlsPreviewResult } from '../ui/hls-preview-dialog'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { movieFormSchema, type MovieFormInput, type MovieFormValues } from '../../lib/movieForm'
+import { movieFormSchema, movieGenreOptions, type MovieFormInput, type MovieFormValues } from '../../lib/movieForm'
 
 interface MovieDetailsFormProps {
   idPrefix: string
@@ -22,6 +24,28 @@ function getErrorMessage(error: unknown): string {
   return 'Unable to save movie details.'
 }
 
+function mergeMetadataJson(existingJson: string, detectedMetadata: Record<string, unknown>): Record<string, unknown> {
+  const trimmed = existingJson.trim()
+
+  if (trimmed.length === 0) {
+    return detectedMetadata
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return {
+        ...(parsed as Record<string, unknown>),
+        ...detectedMetadata,
+      }
+    }
+  } catch {
+    // Keep probe metadata even when the existing value is malformed.
+  }
+
+  return detectedMetadata
+}
+
 export function MovieDetailsForm({
   idPrefix,
   initialValues,
@@ -30,10 +54,21 @@ export function MovieDetailsForm({
   onSubmit,
   onCancel,
 }: MovieDetailsFormProps) {
+  const [previewTarget, setPreviewTarget] = useState<{
+    index: number
+    fieldId: string
+    streamUrl: string
+    serverName: string
+  } | null>(null)
+  const [previewMessages, setPreviewMessages] = useState<Record<string, { kind: 'success' | 'error'; message: string }>>({})
+
   const {
     control,
     register,
     handleSubmit,
+    getValues,
+    watch,
+    setValue,
     setError,
     formState: { errors },
   } = useForm<MovieFormInput, undefined, MovieFormValues>({
@@ -45,6 +80,7 @@ export function MovieDetailsForm({
     control,
     name: 'stream_connections',
   })
+  const selectedGenres = watch('genres') ?? []
 
   async function handleFormSubmit(values: MovieFormValues) {
     try {
@@ -52,6 +88,77 @@ export function MovieDetailsForm({
     } catch (error) {
       setError('root', { message: getErrorMessage(error) })
     }
+  }
+
+  function openStreamPreview(index: number, fieldId: string) {
+    const streamUrl = (getValues(`stream_connections.${index}.link`) ?? '').trim()
+    const serverName = (getValues(`stream_connections.${index}.server_name`) ?? '').trim() || `Connection ${index + 1}`
+
+    if (!streamUrl) {
+      setPreviewMessages((current) => ({
+        ...current,
+        [fieldId]: {
+          kind: 'error',
+          message: 'Enter a stream link before previewing this connection.',
+        },
+      }))
+      return
+    }
+
+    setPreviewTarget({
+      index,
+      fieldId,
+      streamUrl,
+      serverName,
+    })
+  }
+
+  function applyPreviewResult(result: HlsPreviewResult) {
+    if (!previewTarget) {
+      return
+    }
+
+    const streamConnections = getValues('stream_connections') ?? []
+    if (previewTarget.index >= streamConnections.length) {
+      setPreviewTarget(null)
+      return
+    }
+
+    const statusPath = `stream_connections.${previewTarget.index}.status` as const
+    const metadataPath = `stream_connections.${previewTarget.index}.metadata_json` as const
+    setValue(statusPath, result.status, { shouldDirty: true, shouldValidate: true })
+
+    if (result.status === 'live' && result.metadata) {
+      const currentMetadata = getValues(metadataPath) ?? ''
+      const mergedMetadata = mergeMetadataJson(currentMetadata, result.metadata)
+      setValue(metadataPath, JSON.stringify(mergedMetadata, null, 2), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
+
+    setPreviewMessages((current) => ({
+      ...current,
+      [previewTarget.fieldId]:
+        result.status === 'live'
+          ? {
+              kind: 'success',
+              message: 'Preview succeeded. Status is now live and metadata was updated.',
+            }
+          : {
+              kind: 'error',
+              message: result.errorMessage ?? 'Preview failed. Status is now dead.',
+            },
+    }))
+  }
+
+  function toggleGenre(genre: string) {
+    const currentGenres = getValues('genres') ?? []
+    const nextGenres = currentGenres.includes(genre)
+      ? currentGenres.filter((item) => item !== genre)
+      : [...currentGenres, genre]
+
+    setValue('genres', nextGenres, { shouldDirty: true, shouldValidate: true })
   }
 
   return (
@@ -112,10 +219,37 @@ export function MovieDetailsForm({
         {errors.actors_csv ? <small className="text-xs text-red-600">{errors.actors_csv.message}</small> : null}
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-genres_csv`}>Genres (comma-separated)</Label>
-        <Input id={`${idPrefix}-genres_csv`} placeholder="Action, Drama" {...register('genres_csv')} />
-        {errors.genres_csv ? <small className="text-xs text-red-600">{errors.genres_csv.message}</small> : null}
+      <div className="grid gap-3 md:col-span-2">
+        <Label>Genres</Label>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {movieGenreOptions.map((genre) => {
+            const isChecked = selectedGenres.includes(genre)
+            const genreId = `${idPrefix}-genre-${genre.toLowerCase().replace(/\s+/g, '-')}`
+
+            return (
+              <label
+                key={genre}
+                htmlFor={genreId}
+                className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <input
+                  id={genreId}
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleGenre(genre)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                {genre}
+              </label>
+            )
+          })}
+        </div>
+        {selectedGenres.length > 0 ? (
+          <p className="text-xs text-muted-foreground">Selected: {selectedGenres.join(', ')}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">Select one or more genres.</p>
+        )}
+        {errors.genres ? <small className="text-xs text-red-600">{errors.genres.message}</small> : null}
       </div>
 
       <div className="grid gap-2 md:col-span-2">
@@ -183,11 +317,20 @@ export function MovieDetailsForm({
                 >
                   Down
                 </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => openStreamPreview(index, field.id)}>
+                  Preview
+                </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => remove(index)}>
                   Remove
                 </Button>
               </div>
             </div>
+
+            {previewMessages[field.id] ? (
+              <p className={previewMessages[field.id].kind === 'success' ? 'text-xs text-emerald-700' : 'text-xs text-red-600'}>
+                {previewMessages[field.id].message}
+              </p>
+            ) : null}
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="grid gap-2">
@@ -277,6 +420,14 @@ export function MovieDetailsForm({
           </Button>
         ) : null}
       </div>
+
+      <HlsPreviewDialog
+        open={Boolean(previewTarget)}
+        title={previewTarget ? `Preview stream: ${previewTarget.serverName}` : 'Preview stream'}
+        streamUrl={previewTarget?.streamUrl ?? ''}
+        onResolved={applyPreviewResult}
+        onClose={() => setPreviewTarget(null)}
+      />
     </form>
   )
 }
