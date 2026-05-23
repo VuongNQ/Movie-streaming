@@ -19,6 +19,12 @@ interface HlsPreviewDialogProps {
 
 type PreviewState = 'idle' | 'loading' | 'live' | 'dead'
 
+interface CachedPreviewState {
+  state: PreviewState
+  errorMessage: string
+  metadata: Record<string, unknown> | null
+}
+
 function toRoundedNumber(value: number | undefined): number | undefined {
   if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
     return undefined
@@ -65,6 +71,7 @@ function isCodecUnsupportedError(mediaCode: number | undefined, mediaMessage: st
 export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }: HlsPreviewDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const onResolvedRef = useRef(onResolved)
+  const previewCacheRef = useRef<Map<string, CachedPreviewState>>(new Map())
   const [previewState, setPreviewState] = useState<PreviewState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null)
@@ -141,7 +148,8 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
       return
     }
 
-    queueUiState('loading', '', null)
+    const cachedState = previewCacheRef.current.get(url)
+    queueUiState('loading', cachedState?.errorMessage ?? '', cachedState?.metadata ?? null)
 
     const probeStartAt = performance.now()
     let isSettled = false
@@ -188,6 +196,11 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
       setPreviewState(result.status)
       setErrorMessage(result.errorMessage ?? '')
       setMetadata(mergedMetadata ?? null)
+      previewCacheRef.current.set(url, {
+        state: result.status,
+        errorMessage: result.errorMessage ?? '',
+        metadata: mergedMetadata ?? null,
+      })
       onResolvedRef.current({
         ...result,
         metadata: mergedMetadata,
