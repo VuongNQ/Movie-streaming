@@ -1,7 +1,7 @@
 ---
 name: firestore-security-testgen
-description: 'Generate or update Firestore Security Rules tests using Firebase Emulator Suite for guest/user/admin role matrix, ownership checks, deny assertions, and field-protection constraints in Movie-streaming.'
-argument-hint: 'Provide changed rules/policies, target runtime (vitest|jest|other), and scope (movies|users|devices|all)'
+description: 'Generate or update Firestore Security Rules tests using Firebase Emulator Suite for guest/user/admin role matrix, ownership checks, deny assertions, and the exact field protections enforced in Movie-streaming.'
+argument-hint: 'Provide changed rules/policies, target runtime (vitest|jest|other), scope (movies|users|devices|all), and whether an emulator test harness already exists'
 user-invocable: true
 ---
 
@@ -24,9 +24,10 @@ user-invocable: true
 2. Build test matrix for allow and deny paths by role.
 3. Add ownership tests for users/{uid} and users/{uid}/devices/{deviceId}.
 4. Add field-protection tests (role, uid, created_at immutable for non-admin).
-5. Add data validation tests (for example current_position_seconds >= 0 where enforced).
+5. Add data validation tests only for constraints enforced by the current rules or introduced in the same change. In the current repo, that includes movie id alignment, allowed movie type/audio_types values, and list-type checks for playlist/tracking_history.
 6. Generate deterministic emulator fixtures and auth contexts.
-7. Return runnable test files and execution commands.
+7. If no harness exists yet, return the recommended file layout and setup files in addition to the tests.
+8. Return runnable test files and execution commands.
 
 ## Coverage Checklist
 - guest read/write behavior for each scoped collection.
@@ -34,6 +35,7 @@ user-invocable: true
 - admin full management behavior where allowed.
 - explicit permission-denied assertions on blocked paths.
 - at least one negative test per allow rule.
+- no tests that assume validation not present in firestore.rules unless the same change adds that validation.
 
 ## Output Contract
 When invoked, return:

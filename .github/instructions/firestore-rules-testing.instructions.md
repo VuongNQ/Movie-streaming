@@ -1,6 +1,6 @@
 ---
 description: "Use when writing or updating Firestore Security Rules tests. Enforces emulator-based test coverage for role matrix, ownership checks, denied operations, and schema-sensitive guardrails for Movie-streaming."
-applyTo: "{firestore.rules,firestore.rules.*,firebase/**,admin-dashboard/**,android-app-tv/**,extension/**,extensions/**,**/*rules*test*,**/*security*test*}"
+applyTo: "{firestore.rules,firestore.rules.*,firebase/**,admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,**/*rules*test*,**/*security*test*}"
 ---
 
 # Firestore Rules Testing Standards
@@ -42,10 +42,13 @@ Use this instruction whenever Firestore rules, auth logic, or access behavior ch
 
 ## Data Validation Cases In Rules Tests
 When rules include field validation, include tests for:
-- invalid enum values;
+- invalid movie enum values such as type or audio_types members;
+- movie create/update rejected when request.resource.data.id does not match movieId;
 - missing required fields in protected writes;
-- malformed tracking_history entries;
-- current_position_seconds < 0 rejected.
+- non-admin attempts to modify protected user fields;
+- device writes rejected when playlist or tracking_history violates the current list-type checks.
+
+Do not assume tracking_history entry-level validation unless the rules under test actually add it.
 
 ## Test Quality Expectations
 - Use clear arrange-act-assert test structure.

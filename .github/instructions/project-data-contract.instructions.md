@@ -1,12 +1,12 @@
 ---
-description: "Use when implementing or modifying Firestore models, API/data mapping, validation, and feature logic for Movie-streaming across admin-dashboard, android-app-tv, and extension code. Enforces movie/users schema, role permissions, and device playlist/tracking behavior from project README and demo collections."
-applyTo: "{admin-dashboard/**,android-app-tv/**,extension/**,extensions/**,README.md}"
+description: "Use when implementing or modifying Firestore models, API/data mapping, validation, and feature logic for Movie-streaming across admin-dashboard, android-app-tv, and extension code. Enforces movie/users schema, role permissions, and device playlist/tracking behavior from the active codebase and README."
+applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,README.md}"
 ---
 
 # Movie Streaming Data Contract Instructions
 
 ## Purpose
-Use these rules to keep Firestore data consistent between Admin Dashboard (React), Android TV app (Kotlin), and future browser-extension ingestion flows.
+Use these rules to keep Firestore data consistent between Admin Dashboard (React), Android TV app (Kotlin), and browser-extension ingestion flows such as app-extension.
 
 ## Canonical Firestore Collections
 - movies: one document per movie/series/franchise entry.
@@ -29,6 +29,8 @@ Required fields:
 - audio_types: array containing dubbing and/or subtitle.
 - genres: string array.
 - stream_connections: array of stream objects.
+- created_at: ISO-8601 UTC string in the current admin-dashboard write path.
+- last_updated: ISO-8601 UTC string in the current admin-dashboard write path.
 
 Optional fields:
 - youtube_trailer_link: string URL (optional).
@@ -45,7 +47,7 @@ User document fields:
 - uid: string, required (same identity value used by app auth mapping).
 - username: string, unique login name.
 - role: one of guest, user, admin.
-- created_at: ISO-8601 UTC string in API contracts; Firestore Timestamp allowed in storage with boundary conversion.
+- created_at: ISO-8601 UTC string in the current admin-dashboard read/write path; Firestore Timestamp may still appear in storage and must be converted at boundaries.
 
 Device document fields (users/{uid}/devices/{deviceId}):
 - device_name: string.
@@ -57,6 +59,9 @@ Tracking object shape:
 - last_watched_at: ISO-8601 UTC string in API contracts; Firestore Timestamp allowed in storage with boundary conversion.
 - current_position_seconds: non-negative integer.
 
+Current rules note:
+- firestore.rules currently validates tracking_history only as a list, not the inner tracking object shape. If code starts depending on stronger guarantees, tighten rules and rules tests in the same change.
+
 ## Role and Behavior Rules
 - guest: no playlist, no tracking persistence.
 - user: can maintain per-device playlist and tracking history.
@@ -67,6 +72,7 @@ Tracking object shape:
 - Keep field names exactly as defined above (snake_case where shown).
 - Do not silently rename fields between React/Kotlin models and Firestore documents.
 - Preserve enum values exactly; avoid alias values.
+- Keep movie document ids aligned with the stored id field. The current admin-dashboard service generates the document id and writes the same value into payload.id.
 - Validate URLs, enum values, and required arrays before write operations.
 - Prefer additive schema changes with backward compatibility.
 
@@ -79,7 +85,10 @@ Tracking object shape:
 ## Implementation Guidance by App
 Admin Dashboard:
 - Treat this schema as source of truth for form validation and CRUD payloads.
+- Use admin-dashboard/src/lib/firestore.ts as the write boundary and admin-dashboard/src/lib/queries.ts for React Query integration; do not bypass the service layer from pages/components.
+- Preserve the current create/update behavior: create writes id, created_at, and last_updated; update preserves created_at and refreshes last_updated.
 - When editing movies, preserve unknown metadata keys inside stream_connections.metadata.
+- Keep reads compatible with Firestore Timestamp values via boundary conversion helpers.
 
 Android TV app:
 - Parse optional fields defensively (for example youtube_trailer_link).
@@ -88,6 +97,7 @@ Android TV app:
 Browser extension:
 - Normalize captured stream links into the stream_connections schema before sending to admin/backend.
 - Always include server_name, link, type, and status; place parser-specific facts inside metadata.
+- If the extension writes to Firestore directly in future work, keep it aligned with the named database configuration used by admin-dashboard.
 
 ## Testing Expectations
 When changing data models or Firestore writes, include tests or checks that cover:

@@ -4,11 +4,12 @@
   "description": "Capture m3u8 links from the current active tab and copy them quickly.",
   "version": "0.1.0",
   "action": {
-    "default_title": "m3u8 Capture"
+    "default_title": "m3u8 Capture",
+    "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "tabs", "storage", "debugger", "scripting", "windows"]
+  "permissions": ["activeTab", "tabs", "storage", "debugger", "scripting"]
 }

@@ -19,7 +19,8 @@ Generate a Firestore rules test suite for this repository using Firebase Emulato
 - Cover ownership checks for users and devices paths.
 - Include field-protection tests:
   - user cannot change role, uid, created_at
-  - current_position_seconds must be >= 0
+  - movie writes must keep request.resource.data.id aligned with movieId
+- Include data validation tests only for constraints enforced by the current or proposed rules. In the current baseline rules, that includes movie type/audio_types validation and list-type validation for playlist/tracking_history.
 - Use deterministic test data and isolated fixtures.
 
 ## Expected Output
@@ -27,6 +28,8 @@ Generate a Firestore rules test suite for this repository using Firebase Emulato
 2. Test file content ready to paste into repository.
 3. Any helper setup files needed for emulator auth/data seeding.
 4. A short command list to run tests locally and in CI.
+
+If the repo has no existing rules-test harness, include the recommended file layout for introducing one.
 
 ## Guardrails
 - Do not suggest production database tests.

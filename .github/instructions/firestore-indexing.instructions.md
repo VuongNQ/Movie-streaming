@@ -1,6 +1,6 @@
 ---
 description: "Use when designing Firestore queries, indexes, pagination, and read/write cost behavior. Establishes index planning and query conventions for movies, users, devices, and tracking workloads in Movie-streaming."
-applyTo: "{admin-dashboard/**,android-app-tv/**,extension/**,extensions/**,firebase/**,firestore.indexes.json,**/*query*,**/*repository*,**/*firestore*}"
+applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,firebase/**,firestore.indexes.json,**/*query*,**/*repository*,**/*firestore*}"
 ---
 
 # Firestore Indexing And Query Performance Standards
@@ -13,6 +13,7 @@ Use this instruction when adding or changing Firestore queries. Optimize for pre
 - Avoid unbounded collection scans in interactive paths.
 - Use explicit where/orderBy combinations that map to known indexes.
 - Keep query filters aligned with actual UI access patterns.
+- Start from current repository query shapes before adding indexes: admin-dashboard reads movies ordered by title, users ordered by created_at, and devices scoped under users/{uid}/devices without pagination.
 
 ## Pagination Requirements
 - Use cursor-based pagination for large collections.
@@ -25,6 +26,7 @@ Use this instruction when adding or changing Firestore queries. Optimize for pre
 - Update firestore.indexes.json with each new query requiring composite index.
 - Avoid creating speculative indexes that no path uses.
 - Remove obsolete indexes after query removal and verification.
+- If firestore.indexes.json does not exist yet, create it in the same change that introduces the first required composite index.
 
 ## Collection-Specific Guidance
 ### movies
@@ -41,6 +43,7 @@ Use this instruction when adding or changing Firestore queries. Optimize for pre
 - Cache stable reads in app layer where appropriate.
 - Avoid repeated identical queries in tight UI loops.
 - Use batched writes for multi-document updates.
+- In admin-dashboard, prefer reusing centralized query keys and invalidation in src/lib/queries.ts over ad-hoc duplicate query paths.
 
 ## Hot Path Performance Checks
 For any new query in user-facing flows, verify:

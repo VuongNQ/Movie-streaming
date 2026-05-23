@@ -20,12 +20,27 @@ type CaptureRequest =
   | { type: "SET_MODE"; mode: DisplayMode };
 
 const DEBUGGER_VERSION = "1.3";
-const STANDALONE_WINDOW_URL = chrome.runtime.getURL("popup.html");
 let attachedTabId: number | null = null;
+const iframeSessionIds = new Set<string>();
 
 interface ResponsePayload {
   url?: string;
   mimeType?: string;
+}
+
+interface DebuggeeWithSession extends chrome.debugger.Debuggee {
+  sessionId?: string;
+}
+
+interface TargetAttachedParams {
+  sessionId?: string;
+  targetInfo?: {
+    type?: string;
+  };
+}
+
+interface TargetDetachedParams {
+  sessionId?: string;
 }
 
 async function readPageMetadata(tabId: number): Promise<PageMetadata | null> {
@@ -68,6 +83,29 @@ function targetFor(tabId: number): chrome.debugger.Debuggee {
   return { tabId };
 }
 
+function targetForSession(
+  tabId: number,
+  sessionId: string,
+): chrome.debugger.Debuggee {
+  return { tabId, sessionId } as chrome.debugger.Debuggee;
+}
+
+function isKnownCaptureTarget(source: chrome.debugger.Debuggee): boolean {
+  if (attachedTabId === null) {
+    return false;
+  }
+
+  const debuggee = source as DebuggeeWithSession;
+  if (debuggee.tabId === attachedTabId) {
+    return true;
+  }
+
+  return (
+    typeof debuggee.sessionId === "string" &&
+    iframeSessionIds.has(debuggee.sessionId)
+  );
+}
+
 async function getCurrentActiveTabId(): Promise<number> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tabId = tabs[0]?.id;
@@ -77,65 +115,77 @@ async function getCurrentActiveTabId(): Promise<number> {
   return tabId;
 }
 
-async function openStandaloneWindow(): Promise<void> {
-  const windows = await chrome.windows.getAll({ populate: true });
-  const existingWindow = windows.find((entry) =>
-    entry.tabs?.some((tab) => tab.url === STANDALONE_WINDOW_URL),
-  );
-
-  if (typeof existingWindow?.id === "number") {
-    await chrome.windows.update(existingWindow.id, { focused: true });
-    return;
-  }
-
-  await chrome.windows.create({
-    url: STANDALONE_WINDOW_URL,
-    type: "popup",
-    width: 460,
-    height: 760,
-    focused: true,
-  });
-}
-
 async function attachToTab(tabId: number): Promise<void> {
-  await chrome.debugger.attach(targetFor(tabId), DEBUGGER_VERSION);
-  await chrome.debugger.sendCommand(targetFor(tabId), "Network.enable");
   attachedTabId = tabId;
+  iframeSessionIds.clear();
+  const rootTarget = targetFor(tabId);
+  await chrome.debugger.attach(rootTarget, DEBUGGER_VERSION);
+  await chrome.debugger.sendCommand(rootTarget, "Target.setAutoAttach", {
+    autoAttach: true,
+    waitForDebuggerOnStart: false,
+    flatten: true,
+  });
+  await chrome.debugger.sendCommand(rootTarget, "Network.enable");
 }
 
 async function detachFromTab(tabId: number): Promise<void> {
+  const rootTarget = targetFor(tabId);
   try {
-    await chrome.debugger.sendCommand(targetFor(tabId), "Network.disable");
+    await chrome.debugger.sendCommand(rootTarget, "Target.setAutoAttach", {
+      autoAttach: false,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+    });
   } catch {
     // Ignore detach preconditions from stale targets.
   }
-  await chrome.debugger.detach(targetFor(tabId));
+  try {
+    await chrome.debugger.sendCommand(rootTarget, "Network.disable");
+  } catch {
+    // Ignore detach preconditions from stale targets.
+  }
+  await chrome.debugger.detach(rootTarget);
   if (attachedTabId === tabId) {
     attachedTabId = null;
+    iframeSessionIds.clear();
   }
 }
 
 chrome.debugger.onEvent.addListener(async (source, method, params) => {
+  if (method === "Target.attachedToTarget" && source.tabId === attachedTabId) {
+    const payload = params as TargetAttachedParams;
+    const sessionId = payload.sessionId;
+    if (
+      payload.targetInfo?.type === "iframe" &&
+      typeof sessionId === "string" &&
+      attachedTabId !== null
+    ) {
+      iframeSessionIds.add(sessionId);
+      await chrome.debugger.sendCommand(
+        targetForSession(attachedTabId, sessionId),
+        "Network.enable",
+      );
+    }
+    return;
+  }
+
+  if (method === "Target.detachedFromTarget") {
+    const payload = params as TargetDetachedParams;
+    if (typeof payload.sessionId === "string") {
+      iframeSessionIds.delete(payload.sessionId);
+    }
+    return;
+  }
+
   if (method !== "Network.responseReceived") {
     return;
   }
 
-  const tabId = source.tabId;
-  if (typeof tabId !== "number" || tabId !== attachedTabId) {
+  if (!isKnownCaptureTarget(source) || attachedTabId === null) {
     return;
   }
 
-  // Add this debug:
-  const p = params as {
-    frameId?: string;
-    response?: { url?: string; mimeType?: string };
-  };
-  console.log("[m3u8-debug]", {
-    tabId,
-    frameId: p.frameId, // iframe usually has non-main frameId
-    url: p.response?.url,
-    mimeType: p.response?.mimeType,
-  });
+  const tabId = attachedTabId;
 
   const state = await getState();
   if (!state.isCapturing || state.activeTabId !== tabId) {
@@ -188,10 +238,6 @@ chrome.debugger.onDetach.addListener(async (source) => {
     const nextState = await setCaptureSession(false, null);
     await broadcastState(nextState);
   }
-});
-
-chrome.action.onClicked.addListener(() => {
-  void openStandaloneWindow();
 });
 
 chrome.runtime.onMessage.addListener(
