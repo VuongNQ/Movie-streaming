@@ -13,7 +13,7 @@ function AdminOnlyRoute() {
   const user = useAuthStore((state) => state.user)
 
   if (!initialized) {
-    return <p className="state-message">Checking session...</p>
+    return <p className="grid min-h-screen place-items-center text-muted-foreground">Checking session...</p>
   }
 
   if (!user) {
@@ -21,7 +21,7 @@ function AdminOnlyRoute() {
   }
 
   if (user.role !== 'admin') {
-    return <p className="state-message">Permission denied. Admin role is required.</p>
+    return <p className="grid min-h-screen place-items-center text-red-600">Permission denied. Admin role is required.</p>
   }
 
   return <Outlet />

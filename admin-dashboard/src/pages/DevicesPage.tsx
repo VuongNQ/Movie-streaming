@@ -1,5 +1,6 @@
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useDevices } from '../lib/queries'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 
 export function DevicesPage() {
   const { uid = '' } = useParams()
@@ -9,30 +10,34 @@ export function DevicesPage() {
   const { data, isLoading, error } = useDevices(uid)
 
   if (isLoading) {
-    return <p>Loading devices...</p>
+    return <p className="text-sm text-muted-foreground">Loading devices...</p>
   }
 
   if (error) {
-    return <p>Unable to load devices.</p>
+    return <p className="text-sm text-red-600">Unable to load devices.</p>
   }
 
   return (
-    <div className="sub-panel">
-      <div className="sub-panel-header">
-        <h3>Devices of {uid}</h3>
-        <Link className="link" to={backLink}>
+    <section className="mt-6 border-t border-border pt-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-display text-xl font-semibold">Devices of {uid}</h3>
+        <Link className="text-sm font-medium text-cyan-700 transition-colors hover:text-cyan-500" to={backLink}>
           Back to users
         </Link>
       </div>
 
-      <ul className="stack">
+      <div className="grid gap-3">
         {(data ?? []).map((device) => (
-          <li key={device.id} className="list-item">
-            <span>{device.device_name}</span>
-            <span className="muted">Playlist: {device.playlist.length}</span>
-          </li>
+          <Card key={device.id} className="border-border/80 shadow-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{device.device_name}</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+              Playlist: {device.playlist.length}
+            </CardContent>
+          </Card>
         ))}
-      </ul>
-    </div>
+      </div>
+    </section>
   )
 }

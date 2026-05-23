@@ -26,6 +26,7 @@ cp .env.example .env.local
 ```
 
 3. Fill Firebase values in .env.local.
+	Set `VITE_FIREBASE_DATABASE_ID=moviestreaming` to use the named Firestore database.
 
 4. Start dev server:
 
