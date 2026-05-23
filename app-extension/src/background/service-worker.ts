@@ -22,6 +22,7 @@ type CaptureRequest =
 const DEBUGGER_VERSION = "1.3";
 let attachedTabId: number | null = null;
 const iframeSessionIds = new Set<string>();
+const processedPageParameterUrls = new Set<string>();
 
 interface ResponsePayload {
   url?: string;
@@ -69,6 +70,39 @@ async function readPageMetadata(tabId: number): Promise<PageMetadata | null> {
   } catch {
     return null;
   }
+}
+
+async function extractM3u8FromPageParams(
+  tabId: number,
+): Promise<string | null> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url) return null;
+
+    const pageUrl = new URL(tab.url);
+    // Check common parameter names: url, link, stream, src, m3u8, playlist
+    const paramNames = ["url", "link", "stream", "src", "m3u8", "playlist"];
+    for (const paramName of paramNames) {
+      const paramValue = pageUrl.searchParams.get(paramName);
+      if (paramValue && paramValue.toLowerCase().includes(".m3u8")) {
+        try {
+          // Try to decode the URL in case it's encoded
+          const decodedUrl = decodeURIComponent(paramValue);
+          if (decodedUrl.startsWith("http")) {
+            return decodedUrl;
+          }
+        } catch {
+          // If decoding fails, try the original value
+          if (paramValue.startsWith("http")) {
+            return paramValue;
+          }
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 async function broadcastState(state: unknown): Promise<void> {
@@ -148,6 +182,7 @@ async function detachFromTab(tabId: number): Promise<void> {
   if (attachedTabId === tabId) {
     attachedTabId = null;
     iframeSessionIds.clear();
+    processedPageParameterUrls.clear();
   }
 }
 
@@ -197,6 +232,13 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
   if (!responseUrl) {
     return;
   }
+
+  // Debug: log all network requests to browser console for troubleshooting
+  console.log("[m3u8-capture-debug]", {
+    url: responseUrl,
+    mimeType: response?.mimeType ?? "unknown",
+    isM3u8Candidate: responseUrl.toLowerCase().includes(".m3u8"),
+  });
 
   const matched = detectM3u8(responseUrl, response?.mimeType);
   if (!matched.matched || !matched.source) {
@@ -268,6 +310,43 @@ chrome.runtime.onMessage.addListener(
           }
 
           const state = await setCaptureSession(true, tabId);
+
+          // Check for m3u8 URL in page parameters (fallback for player pages)
+          const paramM3u8 = await extractM3u8FromPageParams(tabId);
+          if (
+            paramM3u8 &&
+            !processedPageParameterUrls.has(paramM3u8)
+          ) {
+            processedPageParameterUrls.add(paramM3u8);
+            const tab = await chrome.tabs.get(tabId);
+            const tabUrl = tab.url ?? null;
+            const trackingKey = buildTrackingKey(paramM3u8, tabUrl);
+            const existing = state.history.find(
+              (item) => item.trackingKey === trackingKey,
+            );
+
+            if (!existing) {
+              const now = new Date().toISOString();
+              const link: CapturedLink = {
+                trackingKey,
+                url: paramM3u8,
+                tabUrl,
+                pageTitle: tab.title ?? null,
+                pageMetadata: null,
+                firstSeenAt: now,
+                detectedAt: now,
+                captureCount: 1,
+                tabId,
+                contentType: "application/vnd.apple.mpegurl",
+                source: "url",
+                linkMetadata: buildLinkMetadata(paramM3u8),
+              };
+
+              const nextState = await appendCapturedLink(link);
+              await broadcastState(nextState);
+            }
+          }
+
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
           return;
         }
@@ -277,6 +356,7 @@ chrome.runtime.onMessage.addListener(
             await detachFromTab(attachedTabId);
           }
 
+          processedPageParameterUrls.clear();
           const state = await setCaptureSession(false, null);
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
           return;
