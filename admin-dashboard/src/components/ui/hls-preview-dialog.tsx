@@ -64,9 +64,14 @@ function isCodecUnsupportedError(mediaCode: number | undefined, mediaMessage: st
 
 export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }: HlsPreviewDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const onResolvedRef = useRef(onResolved)
   const [previewState, setPreviewState] = useState<PreviewState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null)
+
+  useEffect(() => {
+    onResolvedRef.current = onResolved
+  }, [onResolved])
 
   useEffect(() => {
     if (!open) {
@@ -107,7 +112,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     if (!url) {
       const message = 'Stream link is empty. Enter a valid HLS URL before previewing.'
       queueUiState('dead', message, null)
-      onResolved({ status: 'dead', errorMessage: message })
+      onResolvedRef.current({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -117,14 +122,14 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     } catch {
       const message = 'Stream link is invalid. Please provide a full URL.'
       queueUiState('dead', message, null)
-      onResolved({ status: 'dead', errorMessage: message })
+      onResolvedRef.current({ status: 'dead', errorMessage: message })
       return
     }
 
     if (window.location.protocol === 'https:' && parsedUrl.protocol === 'http:') {
       const message = 'Mixed content blocked: HTTP streams cannot be previewed from an HTTPS admin page.'
       queueUiState('dead', message, null)
-      onResolved({ status: 'dead', errorMessage: message })
+      onResolvedRef.current({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -132,7 +137,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     if (!video) {
       const message = 'Video element is unavailable. Close and reopen preview.'
       queueUiState('dead', message, null)
-      onResolved({ status: 'dead', errorMessage: message })
+      onResolvedRef.current({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -183,7 +188,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
       setPreviewState(result.status)
       setErrorMessage(result.errorMessage ?? '')
       setMetadata(mergedMetadata ?? null)
-      onResolved({
+      onResolvedRef.current({
         ...result,
         metadata: mergedMetadata,
       })
@@ -348,7 +353,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
       video.removeEventListener('error', onVideoError)
       dispose()
     }
-  }, [open, streamUrl, onResolved])
+  }, [open, streamUrl])
 
   if (!open) {
     return null
