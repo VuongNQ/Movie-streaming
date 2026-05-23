@@ -174,6 +174,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
       video.load()
 
       if (hlsInstance) {
+        hlsInstance.detachMedia()
         hlsInstance.destroy()
         hlsInstance = null
       }
@@ -215,11 +216,150 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
 
     const canUseNativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== ''
 
+    if (Hls.isSupported()) {
+      let networkRecoveryAttempted = false
+      let mediaRecoveryAttempted = false
+
+      hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: false })
+      hlsInstance.loadSource(url)
+
+      // Match basic demo behavior: once media is attached, try playback.
+      hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
+        playPromise()
+      })
+
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        manifestParsed = true
+        const levels = data.levels ?? []
+        const renditionHeights = levels.map((level) => level.height).filter((height): height is number => typeof height === 'number')
+        const renditionWidths = levels.map((level) => level.width).filter((width): width is number => typeof width === 'number')
+        const renditionBitrates = levels.map((level) => level.bitrate).filter((bitrate): bitrate is number => typeof bitrate === 'number')
+        const codecs = levels.map((level) => level.codecSet).filter((codec): codec is string => typeof codec === 'string' && codec.length > 0)
+
+        pendingMetadata = {
+          detected_by: 'hls.js',
+          tested_at: new Date().toISOString(),
+          manifest_url: url,
+          rendition_count: levels.length,
+          max_height: renditionHeights.length > 0 ? Math.max(...renditionHeights) : undefined,
+          max_width: renditionWidths.length > 0 ? Math.max(...renditionWidths) : undefined,
+          max_bitrate_kbps: renditionBitrates.length > 0 ? Math.round(Math.max(...renditionBitrates) / 1000) : undefined,
+          codecs,
+        }
+
+        playPromise()
+      })
+
+      hlsInstance.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+        pendingMetadata = {
+          ...(pendingMetadata ?? {}),
+          bandwidth_estimate: toRoundedNumber(hlsInstance?.bandwidthEstimate),
+          level_bitrate: data.details?.totalduration ? toRoundedNumber(hlsInstance?.levels?.[hlsInstance.currentLevel]?.bitrate) : undefined,
+          is_live: data.details?.live ?? undefined,
+          target_duration: toRoundedNumber(data.details?.targetduration),
+        }
+      })
+
+      const onPlayable = () => {
+        finish({
+          status: 'live',
+          metadata: {
+            ...(pendingMetadata ?? {}),
+            video_width: video.videoWidth || undefined,
+            video_height: video.videoHeight || undefined,
+            current_time_seconds: toRoundedNumber(video.currentTime),
+            ready_state: video.readyState,
+          },
+        })
+        playPromise()
+      }
+
+      const onVideoError = () => {
+        const mediaError = video.error
+        const mediaCode = mediaError?.code
+        const mediaMessageText = mediaError?.message ?? ''
+        const mediaMessage = mediaMessageText ? ` MediaError: ${mediaMessageText}` : ''
+        const hlsContext = lastHlsErrorInfo ? ` Last HLS error: ${lastHlsErrorInfo}.` : ''
+
+        if (manifestParsed && isCodecUnsupportedError(mediaCode, mediaMessageText, lastHlsErrorInfo)) {
+          finish({
+            status: 'live',
+            metadata: {
+              ...(pendingMetadata ?? {}),
+              video_width: video.videoWidth || undefined,
+              video_height: video.videoHeight || undefined,
+              ready_state: video.readyState,
+              preview_warning:
+                'Browser decoder does not support this stream audio/video config. Stream appears reachable but cannot be rendered in this preview environment.',
+              preview_warning_code: 'codec_not_supported',
+              media_error_code: mediaCode,
+              media_error_message: mediaMessageText || undefined,
+              last_hls_error: lastHlsErrorInfo || undefined,
+            },
+          })
+          return
+        }
+
+        finish({
+          status: 'dead',
+          errorMessage: `Video element failed to decode or render this stream${typeof mediaCode === 'number' ? ` (code ${mediaCode})` : ''}.${mediaMessage}${hlsContext}`,
+          metadata: pendingMetadata ?? undefined,
+        })
+      }
+
+      video.addEventListener('loadeddata', onPlayable)
+      video.addEventListener('canplay', onPlayable)
+      video.addEventListener('error', onVideoError)
+
+      hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
+        const detail = typeof data.details === 'string' ? data.details : 'unknown'
+        const type = typeof data.type === 'string' ? data.type : 'unknown'
+        lastHlsErrorInfo = `${type}:${detail}${data.fatal ? ':fatal' : ':non-fatal'}`
+
+        if (!data.fatal) {
+          return
+        }
+
+        if (type === Hls.ErrorTypes.NETWORK_ERROR && !networkRecoveryAttempted) {
+          networkRecoveryAttempted = true
+          hlsInstance?.startLoad()
+          return
+        }
+
+        if (type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryAttempted) {
+          mediaRecoveryAttempted = true
+          hlsInstance?.recoverMediaError()
+          return
+        }
+
+        finish({
+          status: 'dead',
+          errorMessage: `${normalizeHlsError(type, detail)} Check link validity, auth/referrer requirements, network reachability, or CORS policy.`,
+          metadata: {
+            ...(pendingMetadata ?? {}),
+            error_type: type,
+            error_details: detail,
+          },
+        })
+      })
+
+      hlsInstance.attachMedia(video)
+
+      return () => {
+        isDisposed = true
+        video.removeEventListener('loadeddata', onPlayable)
+        video.removeEventListener('canplay', onPlayable)
+        video.removeEventListener('error', onVideoError)
+        dispose()
+      }
+    }
+
     if (canUseNativeHls) {
-      const onLoadedData = () => {
+      const onCanPlay = () => {
         const nativeMetadata: Record<string, unknown> = {
           detected_by: 'native_hls',
           tested_at: new Date().toISOString(),
+          manifest_url: url,
           duration_seconds: toRoundedNumber(video.duration),
           video_width: video.videoWidth || undefined,
           video_height: video.videoHeight || undefined,
@@ -237,133 +377,26 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
         })
       }
 
-      video.addEventListener('loadeddata', onLoadedData)
+      video.addEventListener('canplay', onCanPlay)
       video.addEventListener('error', onError)
       video.src = url
       video.load()
-      playPromise()
 
       return () => {
         isDisposed = true
-        video.removeEventListener('loadeddata', onLoadedData)
+        video.removeEventListener('canplay', onCanPlay)
         video.removeEventListener('error', onError)
         dispose()
       }
     }
 
-    if (!Hls.isSupported()) {
-      finish({
-        status: 'dead',
-        errorMessage: 'This browser does not support HLS playback for preview.',
-      })
-
-      return () => {
-        isDisposed = true
-        dispose()
-      }
-    }
-
-    hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: false })
-
-    hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
-      hlsInstance?.loadSource(url)
+    finish({
+      status: 'dead',
+      errorMessage: 'This browser does not support HLS playback for preview.',
     })
-
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-      manifestParsed = true
-      const levels = data.levels ?? []
-      const renditionHeights = levels.map((level) => level.height).filter((height): height is number => typeof height === 'number')
-      const renditionWidths = levels.map((level) => level.width).filter((width): width is number => typeof width === 'number')
-      const renditionBitrates = levels.map((level) => level.bitrate).filter((bitrate): bitrate is number => typeof bitrate === 'number')
-      const codecs = levels.map((level) => level.codecSet).filter((codec): codec is string => typeof codec === 'string' && codec.length > 0)
-
-      pendingMetadata = {
-        detected_by: 'hls.js',
-        tested_at: new Date().toISOString(),
-        rendition_count: levels.length,
-        max_height: renditionHeights.length > 0 ? Math.max(...renditionHeights) : undefined,
-        max_width: renditionWidths.length > 0 ? Math.max(...renditionWidths) : undefined,
-        max_bitrate_kbps: renditionBitrates.length > 0 ? Math.round(Math.max(...renditionBitrates) / 1000) : undefined,
-        codecs,
-      }
-
-      playPromise()
-    })
-
-    const onPlayable = () => {
-      finish({
-        status: 'live',
-        metadata: {
-          ...(pendingMetadata ?? {}),
-          video_width: video.videoWidth || undefined,
-          video_height: video.videoHeight || undefined,
-          current_time_seconds: toRoundedNumber(video.currentTime),
-          ready_state: video.readyState,
-        },
-      })
-      playPromise()
-    }
-
-    const onVideoError = () => {
-      const mediaError = video.error
-      const mediaCode = mediaError?.code
-      const mediaMessageText = mediaError?.message ?? ''
-      const mediaMessage = mediaMessageText ? ` MediaError: ${mediaMessageText}` : ''
-      const hlsContext = lastHlsErrorInfo ? ` Last HLS error: ${lastHlsErrorInfo}.` : ''
-
-      if (manifestParsed && isCodecUnsupportedError(mediaCode, mediaMessageText, lastHlsErrorInfo)) {
-        finish({
-          status: 'live',
-          metadata: {
-            ...(pendingMetadata ?? {}),
-            video_width: video.videoWidth || undefined,
-            video_height: video.videoHeight || undefined,
-            ready_state: video.readyState,
-            preview_warning:
-              'Browser decoder does not support this stream audio/video config. Stream appears reachable but cannot be rendered in this preview environment.',
-            preview_warning_code: 'codec_not_supported',
-            media_error_code: mediaCode,
-            media_error_message: mediaMessageText || undefined,
-            last_hls_error: lastHlsErrorInfo || undefined,
-          },
-        })
-        return
-      }
-
-      finish({
-        status: 'dead',
-        errorMessage: `Video element failed to decode or render this stream${typeof mediaCode === 'number' ? ` (code ${mediaCode})` : ''}.${mediaMessage}${hlsContext}`,
-        metadata: pendingMetadata ?? undefined,
-      })
-    }
-
-    video.addEventListener('loadeddata', onPlayable)
-    video.addEventListener('canplay', onPlayable)
-    video.addEventListener('error', onVideoError)
-
-    hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
-      const detail = typeof data.details === 'string' ? data.details : 'unknown'
-      const type = typeof data.type === 'string' ? data.type : 'unknown'
-      lastHlsErrorInfo = `${type}:${detail}${data.fatal ? ':fatal' : ':non-fatal'}`
-
-      if (!data.fatal) {
-        return
-      }
-
-      finish({
-        status: 'dead',
-        errorMessage: `${normalizeHlsError(type, detail)} Check link validity, auth/referrer requirements, network reachability, or CORS policy.`,
-        metadata: pendingMetadata ?? undefined,
-      })
-    })
-
-    hlsInstance.attachMedia(video)
 
     return () => {
       isDisposed = true
-      video.removeEventListener('loadeddata', onPlayable)
-      video.removeEventListener('canplay', onPlayable)
-      video.removeEventListener('error', onVideoError)
       dispose()
     }
   }, [open, streamUrl])
