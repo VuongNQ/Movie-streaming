@@ -69,6 +69,7 @@ cd android-app-tv
 - **Keep auth and role checks layered, not UI-only.** Follow current pattern: route guard + Zustand auth role state + backend/rules alignment.
 - **React Query key strategy is centralized in `queryKeys` (`lib/queries.ts`).** Reuse these keys and invalidate by key family instead of ad-hoc strings.
 - **Type contracts in `admin-dashboard/src/types/index.ts` must stay in sync with Firestore docs and any Android model changes.**
+- **HLS preview code in admin-dashboard must follow official hls.js API lifecycle.** Prefer `Hls.isSupported()` gating, `attachMedia` then `loadSource`, `Hls.Events.ERROR` handling via `ErrorData` (`type`, `details`, `fatal`), bounded fatal recovery (`startLoad` or `recoverMediaError`), and guaranteed `destroy` cleanup.
 - **When changing access behavior or Firestore schema**, update the paired instruction sources together:
   - `.github/instructions/project-data-contract.instructions.md`
   - `.github/instructions/firestore-security.instructions.md`
