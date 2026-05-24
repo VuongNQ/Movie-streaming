@@ -1,5 +1,5 @@
 ---
-description: "Use when creating or changing Firestore security rules, authorization logic, role checks, and access control behavior for Movie-streaming. Defines the role-based access matrix for guest/user/admin across movies, users, and devices data."
+description: "Use when creating or changing Firestore security rules, authorization logic, role checks, and access control behavior for Movie-streaming. Defines the role-based access matrix for guest/user/admin across movies, users, devices, and reports data."
 applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,firestore.rules,firestore.rules.*,firebase/**}"
 ---
 
@@ -28,6 +28,11 @@ Collection path: movies/{movieId}
 - user: read allowed, write denied.
 - admin: read/write/delete allowed.
 
+Collection path: reports/{reportId}
+- guest: no read, no write.
+- user: create allowed when reported_by_uid == request.auth.uid, get allowed for own report only, list/update/delete denied.
+- admin: create/get/list/update/delete allowed by rules.
+
 Collection path: users/{uid}
 - guest: no read, no write.
 - user: read own doc only, create own doc when uid == request.auth.uid, update own non-privileged fields only, cannot delete or change role.
@@ -53,6 +58,13 @@ For movies/{movieId} writes:
 - Current rules enforce document id alignment (request.resource.data.id == movieId), title_raw presence, optional title_vietnamese string, optional generated title keyword arrays, optional franchise_movie_ids list, movie type enum, and audio_types values.
 - Current rules validate stream_connections only at the list level, not each nested object field. Treat stronger validation as future policy work until the rules are updated.
 
+For reports/{reportId} writes:
+- Create requires authenticated user and reported_by_uid == request.auth.uid.
+- report_type is constrained to broken_image or broken_stream.
+- issue_field must match report_type (thumbnail_link/background_link for broken_image, stream_link for broken_stream).
+- Immutable after create: movie_id, movie_title_raw, report_type, issue_field, issue_link, reported_by_uid, created_at.
+- Current rules allow admin-only status/admin_note/resolved_at updates; admin-dashboard UI may intentionally keep reports read-only and hide action controls.
+
 ## Rules Implementation Expectations
 - Add helper functions in Firestore rules, for example: isSignedIn(), userRole(), isAdmin(), isOwner(uid).
 - Keep predicates small and composable; reuse shared checks.
@@ -70,6 +82,8 @@ When rules or auth logic change, verify at minimum:
 - guest/user/admin access for each collection path above;
 - user cannot read/write another user's devices;
 - user cannot modify role or uid in users/{uid};
+- user cannot update/delete reports and cannot create reports for another uid;
+- admin reports list access remains limited to admin role;
 - admin can perform full management operations;
 - denied operations fail with permission-denied.
 - movie create/update continues to require stored id alignment with the document id.

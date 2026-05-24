@@ -1,5 +1,5 @@
 ---
-description: "Use when developing the admin-dashboard. Covers React + TypeScript + Vite SPA architecture, movie/user/device management features, React Hook Form, React Query, Zustand auth, Firestore integration, shadcn/UI components, and hls.js preview behavior."
+description: "Use when developing the admin-dashboard. Covers React + TypeScript + Vite SPA architecture, movie/user/device/report management features, React Hook Form, React Query, Zustand auth, Firestore integration, shadcn/UI components, and hls.js preview behavior."
 applyTo: "admin-dashboard/**"
 ---
 
@@ -22,6 +22,7 @@ Use this file when implementing or refactoring admin-dashboard code. Keep archit
 - Keep route guards, role checks, and error handling layered; UI hiding is not authorization.
 - Reuse centralized query keys and invalidation patterns in `src/lib/queries.ts`.
 - Keep movie stream editing logic in form components and use typed value transformers.
+- Reports management UI is currently read-only in admin-dashboard (filters + listing only, no report action/status mutation controls).
 
 ## hls.js Integration Rules (Official API Aligned)
 Source: https://hlsjs.video-dev.org/api-docs/hls.js.hls

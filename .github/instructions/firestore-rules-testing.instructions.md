@@ -35,6 +35,13 @@ Use this instruction whenever Firestore rules, auth logic, or access behavior ch
 - user cannot read/write other users devices.
 - admin has full access.
 
+### Reports: reports/{reportId}
+- guest cannot create/read/list/update/delete.
+- authenticated user can create reports only for own uid (reported_by_uid == request.auth.uid).
+- report owner can get own report.
+- non-admin user cannot list reports and cannot update/delete reports.
+- admin can get/list/update/delete reports.
+
 ## Denial Assertions
 - For every denied path, assert permission-denied explicitly.
 - Do not treat any failure as sufficient; verify error code/type matches security denial.
@@ -47,7 +54,10 @@ When rules include field validation, include tests for:
 - admin movie writes with generated title_search_keywords/title_vietnamese_search_keywords accepted when otherwise valid;
 - missing required fields in protected writes;
 - non-admin attempts to modify protected user fields;
-- device writes rejected when playlist or tracking_history violates the current list-type checks.
+- device writes rejected when playlist or tracking_history violates the current list-type checks;
+- report writes rejected when report_type and issue_field mapping is invalid;
+- report writes rejected when reported_by_uid does not match auth uid;
+- report updates rejected when immutable fields are changed.
 
 Do not assume tracking_history entry-level validation unless the rules under test actually add it.
 

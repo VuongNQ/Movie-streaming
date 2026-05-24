@@ -1,7 +1,7 @@
 ---
 name: admin-dashboard-crud
-description: 'Generate or update admin-dashboard CRUD features for movies, users, devices, and stream preview flows using React Hook Form, React Query, Zustand auth, Firestore integration, and hls.js guidance. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
-argument-hint: 'Provide entity (movie|user|device), action (create|read|update|delete|full), and target page or route'
+description: 'Generate or update admin-dashboard CRUD features for movies, users, devices, and report log management plus stream preview flows using React Hook Form, React Query, Zustand auth, Firestore integration, and hls.js guidance. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
+argument-hint: 'Provide entity (movie|user|device|report), action (create|read|update|delete|full), and target page or route'
 user-invocable: true
 ---
 
@@ -15,7 +15,7 @@ user-invocable: true
 - Implement or improve HLS preview behavior in movie stream connection forms.
 
 ## Required Inputs
-- Entity: movie, user, or device.
+- Entity: movie, user, device, or report.
 - Action scope: create, read, update, delete, or full CRUD.
 - Target path or files in admin-dashboard.
 - Validation and permission requirements.
@@ -28,6 +28,7 @@ user-invocable: true
 4. Implement Firestore service methods in centralized data layer.
 5. Add React Query hooks and cache invalidation strategy.
 6. Apply role-aware UI and service checks aligned with security policy.
+	- For reports, preserve current admin-dashboard behavior as read-only listing/filter unless explicitly asked to add report actions.
 7. Add loading, empty, and permission-denied states.
 8. Add or update tests/checks for critical success and deny paths.
 9. For stream previews, align with hls.js API patterns:

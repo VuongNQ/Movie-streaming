@@ -1,7 +1,7 @@
 ---
 name: firestore-security-testgen
-description: 'Generate or update Firestore Security Rules tests using Firebase Emulator Suite for guest/user/admin role matrix, ownership checks, deny assertions, and the exact field protections enforced in Movie-streaming.'
-argument-hint: 'Provide changed rules/policies, target runtime (vitest|jest|other), scope (movies|users|devices|all), and whether an emulator test harness already exists'
+description: 'Generate or update Firestore Security Rules tests using Firebase Emulator Suite for guest/user/admin role matrix, ownership checks, deny assertions, and the exact field protections enforced in Movie-streaming, including reports collection behavior.'
+argument-hint: 'Provide changed rules/policies, target runtime (vitest|jest|other), scope (movies|users|devices|reports|all), and whether an emulator test harness already exists'
 user-invocable: true
 ---
 
@@ -16,7 +16,7 @@ user-invocable: true
 ## Required Inputs
 - Changed rule or policy summary.
 - Test runtime/framework target.
-- Scope: movies, users, devices, or all.
+- Scope: movies, users, devices, reports, or all.
 - Existing test folder/path preference if any.
 
 ## Procedure

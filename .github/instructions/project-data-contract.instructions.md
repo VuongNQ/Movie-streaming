@@ -1,5 +1,5 @@
 ---
-description: "Use when implementing or modifying Firestore models, API/data mapping, validation, and feature logic for Movie-streaming across admin-dashboard, android-app-tv, and extension code. Enforces movie/users schema, role permissions, and device playlist/tracking behavior from the active codebase and README."
+description: "Use when implementing or modifying Firestore models, API/data mapping, validation, and feature logic for Movie-streaming across admin-dashboard, android-app-tv, and extension code. Enforces movie/users/devices/reports schema, role permissions, and tracking behavior from the active codebase and README."
 applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,README.md}"
 ---
 
@@ -12,6 +12,7 @@ Use these rules to keep Firestore data consistent between Admin Dashboard (React
 - movies: one document per movie/series/franchise entry.
 - users: one document per authenticated account.
 - users/{uid}/devices: subcollection keyed by stable device id.
+- reports: user/admin-submitted issue logs for broken movie image or stream links.
 
 Do not create alternate collection names for the same domain unless explicitly requested.
 
@@ -46,6 +47,24 @@ Stream object shape:
 - status: one of live, dead.
 - metadata: object with provider-specific details (for example resolution, codec).
 
+## Report Document Contract
+Report document fields (reports/{reportId}):
+- movie_id: string, required.
+- movie_title_raw: string, required.
+- report_type: one of broken_image, broken_stream.
+- issue_field: one of thumbnail_link, background_link, stream_link (must align with report_type).
+- issue_link: string URL-like value, required.
+- status: currently open on create; admins may update for moderation workflows in rules.
+- reported_by_uid: string, required, must match authenticated writer on create.
+- created_at: ISO-8601 UTC string.
+- updated_at: ISO-8601 UTC string.
+- note: optional string.
+- preview_status: optional value live or dead.
+- preview_error_message: optional string.
+- preview_metadata: optional map/object.
+- admin_note: optional string (admin-managed if moderation workflow is enabled in UI).
+- resolved_at: optional ISO-8601 UTC string.
+
 ## User and Device Contract
 User document fields:
 - uid: string, required (same identity value used by app auth mapping).
@@ -70,6 +89,7 @@ Current rules note:
 - guest: no playlist, no tracking persistence.
 - user: can maintain per-device playlist and tracking history.
 - admin: full movie/user management in admin-dashboard.
+- reports: authenticated user/admin can create report logs; admin dashboard currently treats reports as read-only records (no action/status controls in UI).
 - Enforce role checks in UI and service layer, not only in views.
 
 ## Cross-App Consistency Rules
@@ -109,4 +129,5 @@ When changing data models or Firestore writes, include tests or checks that cove
 - accepted and rejected enum values;
 - role-based behavior differences (guest vs user/admin);
 - stream_connections validation;
-- playlist/tracking behavior under users/{uid}/devices.
+- playlist/tracking behavior under users/{uid}/devices;
+- reports validation constraints (report_type, issue_field mapping, reported_by_uid ownership on create).

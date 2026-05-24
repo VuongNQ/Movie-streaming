@@ -1,5 +1,5 @@
 ---
-description: "Use when designing Firestore queries, indexes, pagination, and read/write cost behavior. Establishes index planning and query conventions for movies, users, devices, and tracking workloads in Movie-streaming."
+description: "Use when designing Firestore queries, indexes, pagination, and read/write cost behavior. Establishes index planning and query conventions for movies, users, devices, reports, and tracking workloads in Movie-streaming."
 applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,firebase/**,firestore.indexes.json,**/*query*,**/*repository*,**/*firestore*}"
 ---
 
@@ -37,6 +37,12 @@ Use this instruction when adding or changing Firestore queries. Optimize for pre
 - Prefer scoped reads by uid and deviceId.
 - Avoid global device scans unless truly required for admin diagnostics.
 - Keep tracking_history reads bounded by device and recency constraints where possible.
+
+### reports
+- Treat reports as an append-heavy log collection with admin-facing filters.
+- Add only query-backed composites (for example status + created_at, report_type + created_at, movie_id + created_at).
+- Prefer ordering by created_at descending for moderation timelines.
+- If admin UI is read-only, avoid adding speculative indexes for write-action workflows that do not exist.
 
 ## Cost Control
 - Read only required fields where architecture allows projection patterns.
