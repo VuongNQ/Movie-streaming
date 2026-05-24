@@ -20,6 +20,8 @@ export interface Movie {
   title?: string
   title_raw: string
   title_vietnamese?: string
+  title_search_keywords?: string[]
+  title_vietnamese_search_keywords?: string[]
   description: string
   thumbnail_link: string
   background_link: string
@@ -37,6 +39,12 @@ export interface Movie {
 }
 
 export type MovieInput = Omit<Movie, 'id'>
+
+export interface MovieSearchFilters {
+  title: string
+  genres: string[]
+  year?: number
+}
 
 export interface User {
   uid: string

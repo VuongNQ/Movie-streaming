@@ -6,15 +6,31 @@ import { HlsPreviewDialog, type HlsPreviewResult } from '../ui/hls-preview-dialo
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { movieFormSchema, movieGenreOptions, type MovieFormInput, type MovieFormValues } from '../../lib/movieForm'
+import type { Movie } from '../../types'
 
 interface MovieDetailsFormProps {
   idPrefix: string
   initialValues: MovieFormInput
+  franchiseMovieOptions?: Movie[]
+  currentMovieId?: string
   submitLabel: string
   isSubmitting: boolean
   onSubmit: (values: MovieFormValues) => Promise<void>
   onCancel?: () => void
   onDirtyStateChange?: (isDirty: boolean) => void
+}
+
+function parseCommaSeparatedValues(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
+function getMovieOptionLabel(movie: Pick<Movie, 'title_raw' | 'title_vietnamese' | 'id'>): string {
+  return movie.title_vietnamese && movie.title_vietnamese.trim().length > 0
+    ? `${movie.title_vietnamese} (${movie.title_raw})`
+    : movie.title_raw || movie.id
 }
 
 function getErrorMessage(error: unknown): string {
@@ -50,12 +66,15 @@ function mergeMetadataJson(existingJson: string, detectedMetadata: Record<string
 export function MovieDetailsForm({
   idPrefix,
   initialValues,
+  franchiseMovieOptions = [],
+  currentMovieId,
   submitLabel,
   isSubmitting,
   onSubmit,
   onCancel,
   onDirtyStateChange,
 }: MovieDetailsFormProps) {
+  const [franchiseSearchInput, setFranchiseSearchInput] = useState('')
   const [previewTarget, setPreviewTarget] = useState<{
     index: number
     fieldId: string
@@ -84,6 +103,18 @@ export function MovieDetailsForm({
   })
   const selectedGenres = watch('genres') ?? []
   const selectedType = watch('type')
+  const selectedFranchiseMovieIds = parseCommaSeparatedValues(watch('franchise_movie_ids_csv') ?? '')
+  const franchiseOptions = franchiseMovieOptions.filter((movie) => movie.id !== currentMovieId)
+  const visibleFranchiseOptions = franchiseOptions
+    .filter((movie) => {
+      if (franchiseSearchInput.trim().length === 0) {
+        return true
+      }
+
+      const haystack = `${movie.id} ${movie.title_raw} ${movie.title_vietnamese ?? ''}`.toLowerCase()
+      return haystack.includes(franchiseSearchInput.trim().toLowerCase())
+    })
+    .slice(0, 12)
 
   useEffect(() => {
     onDirtyStateChange?.(isDirty)
@@ -175,6 +206,22 @@ export function MovieDetailsForm({
     setValue('genres', nextGenres, { shouldDirty: true, shouldValidate: true })
   }
 
+  function toggleFranchiseMovieId(movieId: string) {
+    const currentIds = parseCommaSeparatedValues(getValues('franchise_movie_ids_csv') ?? '')
+    const nextIds = currentIds.includes(movieId)
+      ? currentIds.filter((id) => id !== movieId)
+      : [...currentIds, movieId]
+
+    setValue('franchise_movie_ids_csv', nextIds.join(', '), { shouldDirty: true, shouldValidate: true })
+  }
+
+  function removeFranchiseMovieId(movieId: string) {
+    const currentIds = parseCommaSeparatedValues(getValues('franchise_movie_ids_csv') ?? '')
+    const nextIds = currentIds.filter((id) => id !== movieId)
+
+    setValue('franchise_movie_ids_csv', nextIds.join(', '), { shouldDirty: true, shouldValidate: true })
+  }
+
   return (
     <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(handleFormSubmit)}>
       {isDirty ? (
@@ -252,17 +299,80 @@ export function MovieDetailsForm({
       </div>
 
       {selectedType === 'franchise' ? (
-        <div className="grid gap-2 md:col-span-2">
-          <Label htmlFor={`${idPrefix}-franchise_movie_ids_csv`}>Franchise movie IDs (comma-separated)</Label>
-          <Input
-            id={`${idPrefix}-franchise_movie_ids_csv`}
-            placeholder="movie-a-id, movie-b-id"
-            {...register('franchise_movie_ids_csv')}
-          />
+        <div className="grid gap-3 md:col-span-2">
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}-franchise-search`}>Pick franchise movie IDs</Label>
+            <div className="relative">
+              <Input
+                id={`${idPrefix}-franchise-search`}
+                value={franchiseSearchInput}
+                placeholder="Search by movie title or document ID"
+                className="pr-12"
+                onChange={(event) => setFranchiseSearchInput(event.currentTarget.value)}
+              />
+              {franchiseSearchInput.trim().length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 h-7 -translate-y-1/2 px-2"
+                  onClick={() => setFranchiseSearchInput('')}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <input type="hidden" {...register('franchise_movie_ids_csv')} />
+          </div>
+
+          {selectedFranchiseMovieIds.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedFranchiseMovieIds.map((movieId) => (
+                <Button
+                  key={`${idPrefix}-selected-franchise-${movieId}`}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="max-w-full"
+                  onClick={() => removeFranchiseMovieId(movieId)}
+                  title={movieId}
+                >
+                  <span className="truncate">{movieId} x</span>
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <small className="text-xs text-muted-foreground">No linked movies selected yet.</small>
+          )}
+
+          {franchiseOptions.length === 0 ? (
+            <small className="text-xs text-muted-foreground">No other movies available to link in this franchise.</small>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {visibleFranchiseOptions.map((movie) => {
+                const isSelected = selectedFranchiseMovieIds.includes(movie.id)
+                const optionLabel = getMovieOptionLabel(movie)
+
+                return (
+                  <Button
+                    key={`${idPrefix}-franchise-option-${movie.id}`}
+                    type="button"
+                    variant={isSelected ? 'default' : 'outline'}
+                    className="min-w-0 justify-start overflow-hidden text-left"
+                    onClick={() => toggleFranchiseMovieId(movie.id)}
+                    title={optionLabel}
+                  >
+                    <span className="w-full truncate">{optionLabel}</span>
+                  </Button>
+                )
+              })}
+            </div>
+          )}
+
           {errors.franchise_movie_ids_csv ? (
             <small className="text-xs text-red-600">{errors.franchise_movie_ids_csv.message}</small>
           ) : (
-            <small className="text-xs text-muted-foreground">Use existing movie document IDs that belong to this franchise.</small>
+            <small className="text-xs text-muted-foreground">Select existing movie IDs that belong to this franchise. Click a selected tag to remove it.</small>
           )}
         </div>
       ) : null}

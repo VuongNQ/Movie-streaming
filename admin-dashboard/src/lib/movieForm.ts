@@ -136,6 +136,7 @@ export const movieFormSchema = z
       // Keep legacy title mirror during migration.
       title: value.title_raw,
       title_raw: value.title_raw,
+      title_vietnamese: value.title_vietnamese,
       description: value.description,
       thumbnail_link: value.thumbnail_link,
       background_link: value.background_link,
@@ -146,10 +147,6 @@ export const movieFormSchema = z
       audio_types: value.audio_types,
       genres: value.genres,
       stream_connections: validStreamConnections,
-    }
-
-    if (value.title_vietnamese.length > 0) {
-      payload.title_vietnamese = value.title_vietnamese
     }
 
     payload.franchise_movie_ids = value.type === 'franchise' ? parseCommaList(value.franchise_movie_ids_csv) : []

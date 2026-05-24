@@ -34,6 +34,8 @@ Required fields:
 
 Optional fields:
 - title_vietnamese: string (optional).
+- title_search_keywords: string array (generated from title_raw; write-managed, not user-entered).
+- title_vietnamese_search_keywords: string array (generated from title_vietnamese; write-managed, not user-entered).
 - youtube_trailer_link: string URL (optional).
 - franchise_movie_ids: string array (optional, used to link related movies in a franchise).
 
@@ -75,6 +77,7 @@ Current rules note:
 - Do not silently rename fields between React/Kotlin models and Firestore documents.
 - Preserve enum values exactly; avoid alias values.
 - Keep movie document ids aligned with the stored id field. The current admin-dashboard service generates the document id from title_raw and writes the same value into payload.id.
+- Treat title_search_keywords and title_vietnamese_search_keywords as derived fields owned by the write layer and backfill scripts, not by end-user forms.
 - Validate URLs, enum values, and required arrays before write operations.
 - Prefer additive schema changes with backward compatibility.
 

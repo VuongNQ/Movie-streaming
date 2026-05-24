@@ -34,6 +34,10 @@ service cloud.firestore {
       return value is list;
     }
 
+    function isOptionalStringArrayField(data, fieldName) {
+      return !(fieldName in data) || isStringArray(data[fieldName]);
+    }
+
     function isValidStreamConnections(value) {
       return value is list;
     }
@@ -43,6 +47,8 @@ service cloud.firestore {
         data.title_raw is string && data.title_raw.size() > 0 &&
         (!('title' in data) || (data.title is string && data.title == data.title_raw)) &&
         (!('title_vietnamese' in data) || data.title_vietnamese is string) &&
+        isOptionalStringArrayField(data, 'title_search_keywords') &&
+        isOptionalStringArrayField(data, 'title_vietnamese_search_keywords') &&
         data.description is string &&
         data.thumbnail_link is string &&
         data.background_link is string &&

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MovieDetailsForm } from '../components/forms/MovieDetailsForm'
+import { MovieSearchFiltersSection } from '../components/forms/MovieSearchFiltersSection'
 import { Badge } from '../components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -7,6 +8,7 @@ import { firebaseRuntimeConfig } from '../lib/firebase'
 import { emptyMovieFormInput, movieToFormInput } from '../lib/movieForm'
 import { useAuthPreflight, useCreateMovie, useDeleteMovie, useMovies, useUpdateMovie } from '../lib/queries'
 import { useAuthStore } from '../lib/store'
+import type { MovieSearchFilters } from '../types'
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -33,8 +35,16 @@ function getMovieDisplayTitle(rawTitle: string, vietnameseTitle?: string): strin
   return vietnameseTitle && vietnameseTitle.trim().length > 0 ? `${vietnameseTitle} (${rawTitle})` : rawTitle
 }
 
+const defaultMovieFilters: MovieSearchFilters = {
+  title: '',
+  genres: [],
+}
+
 export function MoviesPage() {
-  const { data, isLoading, error } = useMovies()
+  const [filters, setFilters] = useState<MovieSearchFilters>(defaultMovieFilters)
+  const [titleInput, setTitleInput] = useState(defaultMovieFilters.title)
+  const { data, isLoading, isFetching, error } = useMovies(filters)
+  const { data: allMoviesData } = useMovies(defaultMovieFilters)
   const createMovie = useCreateMovie()
   const updateMovie = useUpdateMovie()
   const deleteMovie = useDeleteMovie()
@@ -88,6 +98,25 @@ export function MoviesPage() {
     setHasUnsavedMovieChanges(isMovieFormDirty)
   }, [isMovieFormDirty, setHasUnsavedMovieChanges])
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setFilters((current) => {
+        if (current.title === titleInput) {
+          return current
+        }
+
+        return {
+          ...current,
+          title: titleInput,
+        }
+      })
+    }, 300)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [titleInput])
+
   useEffect(
     () => () => {
       setHasUnsavedMovieChanges(false)
@@ -97,6 +126,35 @@ export function MoviesPage() {
 
   function notifyUnsavedChangesBlocked(): void {
     window.alert('You have unsaved movie changes. Save or cancel them before opening another movie or changing section.')
+  }
+
+  function updateFilters(nextFilters: Partial<MovieSearchFilters>): void {
+    setFilters((current) => ({
+      ...current,
+      ...nextFilters,
+    }))
+  }
+
+  function toggleGenreFilter(genre: string): void {
+    setFilters((current) => ({
+      ...current,
+      genres: current.genres.includes(genre)
+        ? current.genres.filter((item) => item !== genre)
+        : [...current.genres, genre],
+    }))
+  }
+
+  function resetFilters(): void {
+    setFilters(defaultMovieFilters)
+    setTitleInput(defaultMovieFilters.title)
+  }
+
+  function clearTitleSearch(): void {
+    setTitleInput('')
+    setFilters((current) => ({
+      ...current,
+      title: '',
+    }))
   }
 
   function toggleCreateForm(): void {
@@ -139,16 +197,11 @@ export function MoviesPage() {
     }
   }
 
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading movies...</p>
-  }
-
-  if (error) {
-    return <p className="text-sm text-red-600">Unable to load movies.</p>
-  }
-
   const movies = data ?? []
+  const allMovies = allMoviesData ?? []
+  const shouldShowLoadingState = isLoading && movies.length === 0
   const isEmpty = movies.length === 0
+  const hasActiveFilters = filters.title.trim().length > 0 || filters.genres.length > 0 || filters.year !== undefined
 
   return (
     <section className="space-y-4">
@@ -191,6 +244,7 @@ export function MoviesPage() {
             <MovieDetailsForm
               idPrefix="create-movie"
               initialValues={emptyMovieFormInput()}
+              franchiseMovieOptions={allMovies}
               submitLabel="Add movie"
               isSubmitting={createMovie.isPending}
               onDirtyStateChange={setIsMovieFormDirty}
@@ -208,13 +262,42 @@ export function MoviesPage() {
         </Card>
       ) : null}
 
-      {isEmpty ? (
+      <MovieSearchFiltersSection
+        filters={filters}
+        titleInput={titleInput}
+        isFetching={isFetching}
+        hasActiveFilters={hasActiveFilters}
+        onTitleInputChange={setTitleInput}
+        onClearTitle={clearTitleSearch}
+        onYearChange={(value) => {
+          const nextValue = value.trim()
+          updateFilters({ year: nextValue.length > 0 ? Number(nextValue) : undefined })
+        }}
+        onToggleGenre={toggleGenreFilter}
+        onResetFilters={resetFilters}
+      />
+
+      {error ? (
+        <Card className="border-red-300 bg-red-50/60">
+          <CardContent className="pt-6 text-sm text-red-700">Unable to load movies.</CardContent>
+        </Card>
+      ) : null}
+
+      {shouldShowLoadingState ? (
+        <Card className="border-dashed">
+          <CardContent className="pt-6 text-sm text-muted-foreground">Loading movies...</CardContent>
+        </Card>
+      ) : null}
+
+      {!shouldShowLoadingState && isEmpty ? (
         <Card className="border-dashed">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">No movies yet</CardTitle>
+            <CardTitle className="text-base">{hasActiveFilters ? 'No matching movies' : 'No movies yet'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
-            <p className="text-sm text-muted-foreground">Start your catalog by adding the first movie.</p>
+            <p className="text-sm text-muted-foreground">
+              {hasActiveFilters ? 'Adjust the search filters or reset them to see more movies.' : 'Start your catalog by adding the first movie.'}
+            </p>
           </CardContent>
         </Card>
       ) : null}
@@ -286,6 +369,8 @@ export function MoviesPage() {
                   <MovieDetailsForm
                     idPrefix={`movie-${movie.id}`}
                     initialValues={movieToFormInput(movie)}
+                    franchiseMovieOptions={allMovies}
+                    currentMovieId={movie.id}
                     submitLabel="Update movie"
                     isSubmitting={updateMovie.isPending}
                     onDirtyStateChange={setIsMovieFormDirty}

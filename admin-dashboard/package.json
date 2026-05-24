@@ -9,7 +9,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
-    "create-admin": "node scripts/create-admin.mjs"
+    "create-admin": "node scripts/create-admin.mjs",
+    "backfill-movie-search": "node scripts/backfill-movie-search-keywords.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

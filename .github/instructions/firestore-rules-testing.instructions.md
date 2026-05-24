@@ -44,6 +44,7 @@ Use this instruction whenever Firestore rules, auth logic, or access behavior ch
 When rules include field validation, include tests for:
 - invalid movie enum values such as type or audio_types members;
 - movie create/update rejected when request.resource.data.id does not match movieId;
+- admin movie writes with generated title_search_keywords/title_vietnamese_search_keywords accepted when otherwise valid;
 - missing required fields in protected writes;
 - non-admin attempts to modify protected user fields;
 - device writes rejected when playlist or tracking_history violates the current list-type checks.

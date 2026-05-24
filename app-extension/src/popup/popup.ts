@@ -56,8 +56,22 @@ function createLinkCard(link: CapturedLink): HTMLElement {
   const card = document.createElement('article')
   card.className = 'link-card'
 
+  const header = document.createElement('div')
+  header.className = 'link-header'
+
   const url = document.createElement('p')
+  url.className = 'link-url'
   url.textContent = link.url
+
+  const copyButton = document.createElement('button')
+  copyButton.type = 'button'
+  copyButton.className = 'copy-url'
+  copyButton.textContent = 'Copy URL'
+  copyButton.addEventListener('click', () => {
+    void copyLink(link.url)
+  })
+
+  header.append(url, copyButton)
 
   const meta = document.createElement('div')
   meta.className = 'meta'
@@ -69,14 +83,7 @@ function createLinkCard(link: CapturedLink): HTMLElement {
   const time = document.createElement('span')
   time.textContent = new Date(link.detectedAt).toLocaleTimeString()
 
-  const copyButton = document.createElement('button')
-  copyButton.type = 'button'
-  copyButton.textContent = 'Copy link'
-  copyButton.addEventListener('click', () => {
-    void copyLink(link.url)
-  })
-
-  meta.append(summary, time, copyButton)
+  meta.append(summary, time)
 
   const details = document.createElement('details')
   details.className = 'details'
@@ -121,7 +128,7 @@ function createLinkCard(link: CapturedLink): HTMLElement {
 
   details.appendChild(detailsBody)
 
-  card.append(url, meta, details)
+  card.append(header, meta, details)
 
   return card
 }

@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { firestore } from './firestore'
-import type { MovieInput } from '../types'
+import type { MovieInput, MovieSearchFilters } from '../types'
 
 export const queryKeys = {
-  moviesList: ['movies', 'list'] as const,
+  moviesList: (filters: MovieSearchFilters) => ['movies', 'list', filters] as const,
   movieById: (id: string) => ['movies', id] as const,
   usersList: ['users', 'list'] as const,
   userById: (uid: string) => ['users', uid] as const,
@@ -11,10 +11,10 @@ export const queryKeys = {
   authPreflight: (uid: string) => ['users', uid, 'auth-preflight'] as const,
 }
 
-export function useMovies() {
+export function useMovies(filters: MovieSearchFilters) {
   return useQuery({
-    queryKey: queryKeys.moviesList,
-    queryFn: firestore.getMovies,
+    queryKey: queryKeys.moviesList(filters),
+    queryFn: () => firestore.getMovies(filters),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -25,7 +25,7 @@ export function useCreateMovie() {
   return useMutation({
     mutationFn: (payload: MovieInput) => firestore.createMovie(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.moviesList })
+      await queryClient.invalidateQueries({ queryKey: ['movies', 'list'] })
     },
   })
 }
@@ -37,7 +37,7 @@ export function useUpdateMovie() {
     mutationFn: ({ id, payload }: { id: string; payload: MovieInput }) => firestore.updateMovie(id, payload),
     onSuccess: async (_data, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.moviesList }),
+        queryClient.invalidateQueries({ queryKey: ['movies', 'list'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.movieById(variables.id) }),
       ])
     },
@@ -51,7 +51,7 @@ export function useDeleteMovie() {
     mutationFn: (id: string) => firestore.deleteMovie(id),
     onSuccess: async (_data, id) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.moviesList }),
+        queryClient.invalidateQueries({ queryKey: ['movies', 'list'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.movieById(id) }),
       ])
     },
