@@ -13,8 +13,20 @@ import {
   deleteDoc,
 } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
-import { db, firebaseRuntimeConfig } from './firebase'
-import type { AuthPreflightDiagnostic, Device, DeviceInput, Movie, MovieInput, MovieSearchFilters, User } from '../types'
+import { auth, db, firebaseRuntimeConfig } from './firebase'
+import type {
+  AuthPreflightDiagnostic,
+  Device,
+  DeviceInput,
+  Movie,
+  MovieInput,
+  MovieSearchFilters,
+  Report,
+  ReportCreateInput,
+  ReportsQueryFilters,
+  ReportStatusUpdateInput,
+  User,
+} from '../types'
 
 const movieTitleCollator = new Intl.Collator('vi', { sensitivity: 'base' })
 const FIRESTORE_QUERY_OPERAND_LIMIT = 10
@@ -192,6 +204,64 @@ function mapFirestoreWriteError(error: unknown): Error {
   }
 
   return new Error('Firestore write failed.')
+}
+
+function normalizeReportFromSnapshot(id: string, data: Record<string, unknown>): Report {
+  return {
+    id,
+    movie_id: typeof data.movie_id === 'string' ? data.movie_id : '',
+    movie_title_raw: typeof data.movie_title_raw === 'string' ? data.movie_title_raw : '',
+    report_type: data.report_type === 'broken_stream' ? 'broken_stream' : 'broken_image',
+    issue_field:
+      data.issue_field === 'background_link' || data.issue_field === 'stream_link' ? data.issue_field : 'thumbnail_link',
+    issue_link: typeof data.issue_link === 'string' ? data.issue_link : '',
+    status:
+      data.status === 'in_progress' || data.status === 'resolved'
+        ? data.status
+        : 'open',
+    reported_by_uid: typeof data.reported_by_uid === 'string' ? data.reported_by_uid : '',
+    note: typeof data.note === 'string' ? data.note : undefined,
+    admin_note: typeof data.admin_note === 'string' ? data.admin_note : undefined,
+    preview_status: data.preview_status === 'dead' ? 'dead' : data.preview_status === 'live' ? 'live' : undefined,
+    preview_error_message: typeof data.preview_error_message === 'string' ? data.preview_error_message : undefined,
+    preview_metadata:
+      data.preview_metadata && typeof data.preview_metadata === 'object' && !Array.isArray(data.preview_metadata)
+        ? (data.preview_metadata as Record<string, unknown>)
+        : undefined,
+    created_at: toIsoString(data.created_at),
+    updated_at: toIsoString(data.updated_at),
+    resolved_at:
+      typeof data.resolved_at === 'string' || data.resolved_at instanceof Timestamp || data.resolved_at instanceof Date
+        ? toIsoString(data.resolved_at)
+        : undefined,
+  }
+}
+
+function getPrimaryReportFilter(filters: ReportsQueryFilters):
+  | { field: 'movie_id' | 'status' | 'report_type'; value: string }
+  | null {
+  if (typeof filters.movie_id === 'string' && filters.movie_id.trim().length > 0) {
+    return {
+      field: 'movie_id',
+      value: filters.movie_id.trim(),
+    }
+  }
+
+  if (filters.status) {
+    return {
+      field: 'status',
+      value: filters.status,
+    }
+  }
+
+  if (filters.report_type) {
+    return {
+      field: 'report_type',
+      value: filters.report_type,
+    }
+  }
+
+  return null
 }
 
 function buildMovieId(titleRaw: string): string {
@@ -415,6 +485,72 @@ export const firestore = {
       id: entry.id,
       ...(entry.data() as DeviceInput),
     }))
+  },
+
+  async getReports(filters: ReportsQueryFilters = {}): Promise<Report[]> {
+    const primaryFilter = getPrimaryReportFilter(filters)
+    const reportsQuery = primaryFilter
+      ? query(collection(db, 'reports'), where(primaryFilter.field, '==', primaryFilter.value), orderBy('created_at', 'desc'))
+      : query(collection(db, 'reports'), orderBy('created_at', 'desc'))
+
+    const snapshot = await getDocs(reportsQuery)
+    const reports = snapshot.docs.map((entry) => normalizeReportFromSnapshot(entry.id, entry.data()))
+
+    return reports.filter((report) => {
+      if (filters.movie_id && report.movie_id !== filters.movie_id) {
+        return false
+      }
+
+      if (filters.status && report.status !== filters.status) {
+        return false
+      }
+
+      if (filters.report_type && report.report_type !== filters.report_type) {
+        return false
+      }
+
+      return true
+    })
+  },
+
+  async createReport(payload: ReportCreateInput): Promise<Report> {
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      throw new Error('You must be signed in to submit a report.')
+    }
+
+    const id = doc(collection(db, 'reports')).id
+    const now = new Date().toISOString()
+    const reportPayload = stripUndefinedValues({
+      ...payload,
+      status: 'open',
+      reported_by_uid: currentUser.uid,
+      created_at: now,
+      updated_at: now,
+    })
+
+    try {
+      await setDoc(doc(db, 'reports', id), reportPayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+
+    return normalizeReportFromSnapshot(id, reportPayload as Record<string, unknown>)
+  },
+
+  async updateReportStatus(payload: ReportStatusUpdateInput): Promise<void> {
+    const updatePayload = stripUndefinedValues({
+      status: payload.status,
+      admin_note: payload.admin_note?.trim().length ? payload.admin_note.trim() : deleteField(),
+      updated_at: new Date().toISOString(),
+      resolved_at: payload.status === 'resolved' ? new Date().toISOString() : deleteField(),
+    })
+
+    try {
+      await updateDoc(doc(db, 'reports', payload.id), updatePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
   },
 
   async getAuthPreflight(uid: string): Promise<AuthPreflightDiagnostic> {

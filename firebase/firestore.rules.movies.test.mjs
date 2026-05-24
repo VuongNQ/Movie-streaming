@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getFirestore, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, getFirestore, setDoc, updateDoc } from 'firebase/firestore'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,6 +33,27 @@ function buildMoviePayload(id) {
     stream_connections: [],
     created_at: '2026-05-24T00:00:00.000Z',
     last_updated: '2026-05-24T00:00:00.000Z',
+  }
+}
+
+function buildReportPayload(overrides = {}) {
+  return {
+    movie_id: 'dragon-hunter-1',
+    movie_title_raw: 'Dragon Hunter',
+    report_type: 'broken_stream',
+    issue_field: 'stream_link',
+    issue_link: 'https://example.com/movie.m3u8',
+    status: 'open',
+    reported_by_uid: 'user-1',
+    note: 'Segment loading failed',
+    preview_status: 'dead',
+    preview_error_message: 'Manifest could not be loaded or parsed.',
+    preview_metadata: {
+      detected_by: 'hls.js',
+    },
+    created_at: '2026-05-24T00:00:00.000Z',
+    updated_at: '2026-05-24T00:00:00.000Z',
+    ...overrides,
   }
 }
 
@@ -68,6 +89,12 @@ describe('firestore.rules movies policy', () => {
       await setDoc(doc(adminDb, 'users/user-1'), {
         uid: 'user-1',
         username: 'user',
+        role: 'user',
+        created_at: '2026-05-24T00:00:00.000Z',
+      })
+      await setDoc(doc(adminDb, 'users/user-2'), {
+        uid: 'user-2',
+        username: 'user2',
         role: 'user',
         created_at: '2026-05-24T00:00:00.000Z',
       })
@@ -112,5 +139,110 @@ describe('firestore.rules movies policy', () => {
         last_updated: '2026-05-24T01:00:00.000Z',
       }),
     )
+  })
+
+  it('allows authenticated users to create reports with valid payload', async () => {
+    const userDb = testEnv.authenticatedContext('user-1').firestore()
+    await assertSucceeds(setDoc(doc(userDb, 'reports', 'report-1'), buildReportPayload()))
+  })
+
+  it('denies report creation when reported_by_uid does not match auth uid', async () => {
+    const userDb = testEnv.authenticatedContext('user-1').firestore()
+    await assertFails(
+      setDoc(
+        doc(userDb, 'reports', 'report-2'),
+        buildReportPayload({
+          reported_by_uid: 'user-2',
+        }),
+      ),
+    )
+  })
+
+  it('denies unauthenticated report creation', async () => {
+    const guestDb = testEnv.unauthenticatedContext().firestore()
+    await assertFails(setDoc(doc(guestDb, 'reports', 'report-3'), buildReportPayload()))
+  })
+
+  it('allows admin to update report status and admin note', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const seededDb = context.firestore()
+      await setDoc(doc(seededDb, 'reports', 'report-4'), buildReportPayload())
+    })
+
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore()
+    await assertSucceeds(
+      updateDoc(doc(adminDb, 'reports', 'report-4'), {
+        status: 'resolved',
+        admin_note: 'Verified and fixed source link.',
+        resolved_at: '2026-05-24T01:00:00.000Z',
+        updated_at: '2026-05-24T01:00:00.000Z',
+      }),
+    )
+  })
+
+  it('denies non-admin report status updates', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const seededDb = context.firestore()
+      await setDoc(doc(seededDb, 'reports', 'report-5'), buildReportPayload())
+    })
+
+    const userDb = testEnv.authenticatedContext('user-1').firestore()
+    await assertFails(
+      updateDoc(doc(userDb, 'reports', 'report-5'), {
+        status: 'in_progress',
+        updated_at: '2026-05-24T01:00:00.000Z',
+      }),
+    )
+  })
+
+  it('denies updating immutable report fields even for admin', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const seededDb = context.firestore()
+      await setDoc(doc(seededDb, 'reports', 'report-6'), buildReportPayload())
+    })
+
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore()
+    await assertFails(
+      updateDoc(doc(adminDb, 'reports', 'report-6'), {
+        issue_link: 'https://example.com/changed.m3u8',
+        updated_at: '2026-05-24T01:00:00.000Z',
+      }),
+    )
+  })
+
+  it('denies report create with mismatched report_type and issue_field', async () => {
+    const userDb = testEnv.authenticatedContext('user-1').firestore()
+    await assertFails(
+      setDoc(
+        doc(userDb, 'reports', 'report-7'),
+        buildReportPayload({
+          report_type: 'broken_image',
+          issue_field: 'stream_link',
+        }),
+      ),
+    )
+  })
+
+  it('allows report owner read while denying other non-admin users', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const seededDb = context.firestore()
+      await setDoc(doc(seededDb, 'reports', 'report-8'), buildReportPayload())
+    })
+
+    const ownerDb = testEnv.authenticatedContext('user-1').firestore()
+    const otherUserDb = testEnv.authenticatedContext('user-2').firestore()
+
+    await assertSucceeds(getDoc(doc(ownerDb, 'reports', 'report-8')))
+    await assertFails(getDoc(doc(otherUserDb, 'reports', 'report-8')))
+  })
+
+  it('allows admin to list reports', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const seededDb = context.firestore()
+      await setDoc(doc(seededDb, 'reports', 'report-9'), buildReportPayload())
+    })
+
+    const adminDb = testEnv.authenticatedContext('admin-1').firestore()
+    await assertSucceeds(getDocs(collection(adminDb, 'reports')))
   })
 })

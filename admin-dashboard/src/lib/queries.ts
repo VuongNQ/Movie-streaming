@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { firestore } from './firestore'
-import type { MovieInput, MovieSearchFilters } from '../types'
+import type { MovieInput, MovieSearchFilters, ReportCreateInput, ReportsQueryFilters, ReportStatusUpdateInput } from '../types'
 
 export const queryKeys = {
   moviesList: (filters: MovieSearchFilters) => ['movies', 'list', filters] as const,
@@ -8,6 +8,8 @@ export const queryKeys = {
   usersList: ['users', 'list'] as const,
   userById: (uid: string) => ['users', uid] as const,
   devicesByUser: (uid: string) => ['users', uid, 'devices'] as const,
+  reportsList: (filters: ReportsQueryFilters) => ['reports', 'list', filters] as const,
+  reportById: (id: string) => ['reports', id] as const,
   authPreflight: (uid: string) => ['users', uid, 'auth-preflight'] as const,
 }
 
@@ -80,5 +82,38 @@ export function useAuthPreflight(uid: string, enabled: boolean) {
     queryFn: () => firestore.getAuthPreflight(uid),
     enabled: enabled && Boolean(uid),
     retry: false,
+  })
+}
+
+export function useReports(filters: ReportsQueryFilters) {
+  return useQuery({
+    queryKey: queryKeys.reportsList(filters),
+    queryFn: () => firestore.getReports(filters),
+    staleTime: 60 * 1000,
+  })
+}
+
+export function useCreateReport() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: ReportCreateInput) => firestore.createReport(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
+    },
+  })
+}
+
+export function useUpdateReportStatus() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: ReportStatusUpdateInput) => firestore.updateReportStatus(payload),
+    onSuccess: async (_data, payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reports', 'list'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.reportById(payload.id) }),
+      ])
+    },
   })
 }

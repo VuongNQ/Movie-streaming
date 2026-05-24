@@ -195,6 +195,7 @@ export function MovieDetailsForm({
               message: result.errorMessage ?? 'Preview failed. Status is now dead.',
             },
     }))
+
   }
 
   function toggleGenre(genre: string) {

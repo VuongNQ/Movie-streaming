@@ -76,6 +76,85 @@ service cloud.firestore {
       return value is list;
     }
 
+    function isOptionalStringField(data, fieldName) {
+      return !(fieldName in data) || data[fieldName] is string;
+    }
+
+    function isOptionalMapField(data, fieldName) {
+      return !(fieldName in data) || data[fieldName] is map;
+    }
+
+    function isValidReportType(value) {
+      return value in ['broken_image', 'broken_stream'];
+    }
+
+    function isValidReportStatus(value) {
+      return value in ['open', 'in_progress', 'resolved'];
+    }
+
+    function isValidReportIssueField(reportType, issueField) {
+      return (reportType == 'broken_image' && issueField in ['thumbnail_link', 'background_link']) ||
+        (reportType == 'broken_stream' && issueField == 'stream_link');
+    }
+
+    function hasOnlyReportCreateKeys(data) {
+      return data.keys().hasOnly([
+        'movie_id',
+        'movie_title_raw',
+        'report_type',
+        'issue_field',
+        'issue_link',
+        'status',
+        'reported_by_uid',
+        'note',
+        'preview_status',
+        'preview_error_message',
+        'preview_metadata',
+        'created_at',
+        'updated_at'
+      ]);
+    }
+
+    function isValidReportCreate(data) {
+      return hasOnlyReportCreateKeys(data) &&
+        data.movie_id is string && data.movie_id.size() > 0 &&
+        data.movie_title_raw is string && data.movie_title_raw.size() > 0 &&
+        data.report_type is string && isValidReportType(data.report_type) &&
+        data.issue_field is string && isValidReportIssueField(data.report_type, data.issue_field) &&
+        data.issue_link is string && data.issue_link.size() > 0 &&
+        data.status == 'open' &&
+        data.reported_by_uid == request.auth.uid &&
+        data.created_at is string &&
+        data.updated_at is string &&
+        isOptionalStringField(data, 'note') &&
+        (!('preview_status' in data) || data.preview_status in ['live', 'dead']) &&
+        isOptionalStringField(data, 'preview_error_message') &&
+        isOptionalMapField(data, 'preview_metadata');
+    }
+
+    function isValidReportUpdate(data, previousData) {
+      return data.movie_id == previousData.movie_id &&
+        data.movie_title_raw == previousData.movie_title_raw &&
+        data.report_type == previousData.report_type &&
+        data.issue_field == previousData.issue_field &&
+        data.issue_link == previousData.issue_link &&
+        data.reported_by_uid == previousData.reported_by_uid &&
+        data.created_at == previousData.created_at &&
+        data.status is string && isValidReportStatus(data.status) &&
+        data.updated_at is string &&
+        isOptionalStringField(data, 'admin_note') &&
+        (!('resolved_at' in data) || data.resolved_at is string) &&
+        data.diff(previousData).changedKeys().hasOnly(['status', 'admin_note', 'updated_at', 'resolved_at']);
+    }
+
+    match /reports/{reportId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.reported_by_uid == request.auth.uid);
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidReportCreate(request.resource.data);
+      allow update: if isAdmin() && isValidReportUpdate(request.resource.data, resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /movies/{movieId} {
       allow get, list: if true;
       allow create: if isAdmin() &&
