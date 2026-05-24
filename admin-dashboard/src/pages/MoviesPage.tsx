@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MovieDetailsForm } from '../components/forms/MovieDetailsForm'
 import { Badge } from '../components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
@@ -39,8 +39,10 @@ export function MoviesPage() {
   const updateMovie = useUpdateMovie()
   const deleteMovie = useDeleteMovie()
   const user = useAuthStore((state) => state.user)
+  const setHasUnsavedMovieChanges = useAuthStore((state) => state.setHasUnsavedMovieChanges)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null)
+  const [isMovieFormDirty, setIsMovieFormDirty] = useState(false)
   const permissionError = [createMovie.error, updateMovie.error, deleteMovie.error].find(
     (candidate) =>
       candidate instanceof Error &&
@@ -82,6 +84,48 @@ export function MoviesPage() {
     }
   }
 
+  useEffect(() => {
+    setHasUnsavedMovieChanges(isMovieFormDirty)
+  }, [isMovieFormDirty, setHasUnsavedMovieChanges])
+
+  useEffect(
+    () => () => {
+      setHasUnsavedMovieChanges(false)
+    },
+    [setHasUnsavedMovieChanges],
+  )
+
+  function notifyUnsavedChangesBlocked(): void {
+    window.alert('You have unsaved movie changes. Save or cancel them before opening another movie or changing section.')
+  }
+
+  function toggleCreateForm(): void {
+    if (isMovieFormDirty) {
+      notifyUnsavedChangesBlocked()
+      return
+    }
+
+    setShowCreateForm((current) => {
+      const next = !current
+
+      if (next) {
+        setEditingMovieId(null)
+      }
+
+      return next
+    })
+  }
+
+  function startEditingMovie(movieId: string): void {
+    if (isMovieFormDirty && editingMovieId !== movieId) {
+      notifyUnsavedChangesBlocked()
+      return
+    }
+
+    setShowCreateForm(false)
+    setEditingMovieId(movieId)
+  }
+
   async function handleRemoveMovie(id: string, title: string): Promise<void> {
     const isConfirmed = window.confirm(`Remove movie "${title}" from list?`)
     if (!isConfirmed) {
@@ -110,7 +154,7 @@ export function MoviesPage() {
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-2xl font-bold">Movies</h2>
-        <Button type="button" size="sm" onClick={() => setShowCreateForm((current) => !current)}>
+        <Button type="button" size="sm" onClick={toggleCreateForm}>
           {showCreateForm ? 'Hide form' : 'Add movie'}
         </Button>
       </div>
@@ -149,11 +193,16 @@ export function MoviesPage() {
               initialValues={emptyMovieFormInput()}
               submitLabel="Add movie"
               isSubmitting={createMovie.isPending}
+              onDirtyStateChange={setIsMovieFormDirty}
               onSubmit={async (values) => {
                 await createMovie.mutateAsync(values)
+                setIsMovieFormDirty(false)
                 setShowCreateForm(false)
               }}
-              onCancel={() => setShowCreateForm(false)}
+              onCancel={() => {
+                setIsMovieFormDirty(false)
+                setShowCreateForm(false)
+              }}
             />
           </CardContent>
         </Card>
@@ -233,20 +282,41 @@ export function MoviesPage() {
             </CardHeader>
             <CardContent className="space-y-3 pt-0">
               {editingMovieId === movie.id ? (
-                <MovieDetailsForm
-                  idPrefix={`movie-${movie.id}`}
-                  initialValues={movieToFormInput(movie)}
-                  submitLabel="Update movie"
-                  isSubmitting={updateMovie.isPending}
-                  onSubmit={async (values) => {
-                    await updateMovie.mutateAsync({ id: movie.id, payload: values })
-                    setEditingMovieId(null)
-                  }}
-                  onCancel={() => setEditingMovieId(null)}
-                />
+                <>
+                  <MovieDetailsForm
+                    idPrefix={`movie-${movie.id}`}
+                    initialValues={movieToFormInput(movie)}
+                    submitLabel="Update movie"
+                    isSubmitting={updateMovie.isPending}
+                    onDirtyStateChange={setIsMovieFormDirty}
+                    onSubmit={async (values) => {
+                      await updateMovie.mutateAsync({ id: movie.id, payload: values })
+                      setIsMovieFormDirty(false)
+                      setEditingMovieId(null)
+                    }}
+                    onCancel={() => {
+                      setIsMovieFormDirty(false)
+                      setEditingMovieId(null)
+                    }}
+                  />
+
+                  <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={deleteMovie.isPending}
+                      onClick={() => {
+                        void handleRemoveMovie(movie.id, movieDisplayTitle)
+                      }}
+                    >
+                      {deleteMovie.isPending ? 'Removing...' : 'Delete movie'}
+                    </Button>
+                  </div>
+                </>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditingMovieId(movie.id)}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => startEditingMovie(movie.id)}>
                     Edit details
                   </Button>
                   <Button

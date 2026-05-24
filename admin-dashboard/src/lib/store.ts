@@ -15,9 +15,11 @@ interface AuthState {
   user: AuthUser | null
   loading: boolean
   initialized: boolean
+  hasUnsavedMovieChanges: boolean
   init: () => Unsubscribe
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  setHasUnsavedMovieChanges: (value: boolean) => void
 }
 
 async function fetchRole(uid: string): Promise<UserRole> {
@@ -39,11 +41,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   loading: false,
   initialized: false,
+  hasUnsavedMovieChanges: false,
 
   init: () =>
     onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        set({ user: null, loading: false, initialized: true })
+        set({ user: null, loading: false, initialized: true, hasUnsavedMovieChanges: false })
         return
       }
 
@@ -76,7 +79,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await signOut(auth)
     } finally {
-      set({ loading: false })
+      set({ loading: false, hasUnsavedMovieChanges: false })
     }
+  },
+
+  setHasUnsavedMovieChanges: (value) => {
+    set({ hasUnsavedMovieChanges: value })
   },
 }))

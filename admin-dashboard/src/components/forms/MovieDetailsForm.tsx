@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { Button } from '../ui/button'
@@ -14,6 +14,7 @@ interface MovieDetailsFormProps {
   isSubmitting: boolean
   onSubmit: (values: MovieFormValues) => Promise<void>
   onCancel?: () => void
+  onDirtyStateChange?: (isDirty: boolean) => void
 }
 
 function getErrorMessage(error: unknown): string {
@@ -53,6 +54,7 @@ export function MovieDetailsForm({
   isSubmitting,
   onSubmit,
   onCancel,
+  onDirtyStateChange,
 }: MovieDetailsFormProps) {
   const [previewTarget, setPreviewTarget] = useState<{
     index: number
@@ -70,7 +72,7 @@ export function MovieDetailsForm({
     watch,
     setValue,
     setError,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<MovieFormInput, undefined, MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
     defaultValues: initialValues,
@@ -82,6 +84,17 @@ export function MovieDetailsForm({
   })
   const selectedGenres = watch('genres') ?? []
   const selectedType = watch('type')
+
+  useEffect(() => {
+    onDirtyStateChange?.(isDirty)
+  }, [isDirty, onDirtyStateChange])
+
+  useEffect(
+    () => () => {
+      onDirtyStateChange?.(false)
+    },
+    [onDirtyStateChange],
+  )
 
   async function handleFormSubmit(values: MovieFormValues) {
     try {
@@ -164,6 +177,24 @@ export function MovieDetailsForm({
 
   return (
     <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(handleFormSubmit)}>
+      {isDirty ? (
+        <div className="sticky top-0 z-20 -mx-4 w-[calc(100%+2rem)] sm:-mx-6 sm:w-[calc(100%+3rem)] md:col-span-2">
+          <div className="flex items-center justify-between gap-3 border-y border-amber-300 bg-amber-50 px-4 py-2 sm:px-6">
+            <p className="text-sm font-medium text-amber-800">You have unsaved movie changes.</p>
+            <div className="flex items-center gap-2">
+              <Button type="submit" size="sm" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : submitLabel}
+              </Button>
+              {onCancel ? (
+                <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+                  Discard
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-2 md:col-span-2">
         <Label htmlFor={`${idPrefix}-title_raw`}>Title (Raw)</Label>
         <Input id={`${idPrefix}-title_raw`} placeholder="Original movie title" {...register('title_raw')} />

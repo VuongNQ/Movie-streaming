@@ -13,6 +13,7 @@ const navItems = [
 export function DashboardLayout() {
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const hasUnsavedMovieChanges = useAuthStore((state) => state.hasUnsavedMovieChanges)
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -28,6 +29,14 @@ export function DashboardLayout() {
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              onClick={(event) => {
+                if (!hasUnsavedMovieChanges) {
+                  return
+                }
+
+                event.preventDefault()
+                window.alert('You have unsaved movie changes. Save or cancel them before changing menu.')
+              }}
               className={({ isActive }) =>
                 cn(
                   'inline-flex rounded-md px-3 py-2 text-sm font-medium transition-colors',
