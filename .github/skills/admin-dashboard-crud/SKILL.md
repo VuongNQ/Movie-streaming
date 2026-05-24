@@ -29,6 +29,8 @@ user-invocable: true
 5. Add React Query hooks and cache invalidation strategy.
 6. Apply role-aware UI and service checks aligned with security policy.
 	- For reports, preserve current admin-dashboard behavior as read-only listing/filter unless explicitly asked to add report actions.
+	- For users, treat dashboard create as Firestore profile creation by UID from existing Auth account unless explicitly asked to change product behavior.
+	- For auth lifecycle actions (disable/reset/delete), use callable Cloud Functions wrappers rather than direct Firestore writes.
 7. Add loading, empty, and permission-denied states.
 8. Add or update tests/checks for critical success and deny paths.
 9. For stream previews, align with hls.js API patterns:
@@ -45,6 +47,7 @@ user-invocable: true
 - Query keys are stable and invalidation is scoped.
 - Permission-denied paths are handled gracefully.
 - HLS preview paths have deterministic cleanup and no infinite retry loops.
+- User create form does not request password when product mode is manual auth provisioning.
 
 ## Output Contract
 When invoked, return:

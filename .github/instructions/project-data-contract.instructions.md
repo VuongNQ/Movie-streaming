@@ -71,6 +71,11 @@ User document fields:
 - username: string, unique login name.
 - role: one of guest, user, admin.
 - created_at: ISO-8601 UTC string in the current admin-dashboard read/write path; Firestore Timestamp may still appear in storage and must be converted at boundaries.
+- account_status: optional, one of active or disabled (used by admin auth lifecycle controls).
+
+Auth provisioning note:
+- Firebase Authentication account creation is currently manual (outside dashboard user-create form).
+- Admin dashboard user create flow writes users/{uid} profile using an existing Auth UID.
 
 Device document fields (users/{uid}/devices/{deviceId}):
 - device_name: string.

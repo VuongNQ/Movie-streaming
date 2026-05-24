@@ -18,6 +18,7 @@ import type {
   AuthPreflightDiagnostic,
   Device,
   DeviceInput,
+  DeviceTrackingHistory,
   Movie,
   MovieInput,
   MovieSearchFilters,
@@ -26,6 +27,8 @@ import type {
   ReportsQueryFilters,
   ReportStatusUpdateInput,
   User,
+  UserCreateInput,
+  UserInput,
 } from '../types'
 
 const movieTitleCollator = new Intl.Collator('vi', { sensitivity: 'base' })
@@ -187,6 +190,10 @@ function normalizeOptionalTitleVietnamese(value: string | undefined): string | u
   return trimmed.length > 0 ? trimmed : undefined
 }
 
+function normalizeAccountStatus(value: unknown): 'active' | 'disabled' {
+  return value === 'disabled' ? 'disabled' : 'active'
+}
+
 function mapFirestoreWriteError(error: unknown): Error {
   if (
     typeof error === 'object' &&
@@ -204,6 +211,51 @@ function mapFirestoreWriteError(error: unknown): Error {
   }
 
   return new Error('Firestore write failed.')
+}
+
+function normalizeTrackingHistoryEntries(value: unknown): DeviceTrackingHistory[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .map((entry) => ({
+      movie_id: typeof entry.movie_id === 'string' ? entry.movie_id : '',
+      last_watched_at: toIsoString(entry.last_watched_at),
+      current_position_seconds:
+        typeof entry.current_position_seconds === 'number' && Number.isFinite(entry.current_position_seconds)
+          ? Math.max(0, Math.trunc(entry.current_position_seconds))
+          : 0,
+    }))
+    .filter((entry) => entry.movie_id.length > 0)
+}
+
+function normalizeDeviceFromSnapshot(id: string, data: Record<string, unknown>): Device {
+  return {
+    id,
+    device_name: typeof data.device_name === 'string' ? data.device_name : 'Unknown device',
+    playlist: Array.isArray(data.playlist) ? data.playlist.filter((movieId): movieId is string => typeof movieId === 'string') : [],
+    tracking_history: normalizeTrackingHistoryEntries(data.tracking_history),
+  }
+}
+
+function normalizeDeviceInput(payload: Partial<DeviceInput>): Partial<DeviceInput> {
+  const normalizedPayload: Partial<DeviceInput> = {}
+
+  if (typeof payload.device_name === 'string') {
+    normalizedPayload.device_name = payload.device_name.trim()
+  }
+
+  if (Array.isArray(payload.playlist)) {
+    normalizedPayload.playlist = payload.playlist.filter((movieId): movieId is string => typeof movieId === 'string')
+  }
+
+  if (Array.isArray(payload.tracking_history)) {
+    normalizedPayload.tracking_history = normalizeTrackingHistoryEntries(payload.tracking_history)
+  }
+
+  return normalizedPayload
 }
 
 function normalizeReportFromSnapshot(id: string, data: Record<string, unknown>): Report {
@@ -450,15 +502,29 @@ export const firestore = {
   async getUsers(): Promise<User[]> {
     const snapshot = await getDocs(query(collection(db, 'users'), orderBy('created_at', 'desc')))
 
-    return snapshot.docs.map((entry) => {
+    const users = snapshot.docs.map((entry) => {
       const data = entry.data() as Omit<User, 'uid'>
       return {
         uid: entry.id,
         username: data.username,
         role: data.role,
         created_at: toIsoString(data.created_at),
+        account_status: normalizeAccountStatus(data.account_status),
       }
     })
+
+    const deviceCountByUser = new Map<string, number>()
+    await Promise.all(
+      users.map(async (user) => {
+        const devicesSnapshot = await getDocs(collection(db, `users/${user.uid}/devices`))
+        deviceCountByUser.set(user.uid, devicesSnapshot.size)
+      }),
+    )
+
+    return users.map((user) => ({
+      ...user,
+      device_count: deviceCountByUser.get(user.uid) ?? 0,
+    }))
   },
 
   async getUserById(uid: string): Promise<User> {
@@ -475,16 +541,109 @@ export const firestore = {
       username: data.username,
       role: data.role,
       created_at: toIsoString(data.created_at),
+      account_status: normalizeAccountStatus(data.account_status),
     }
   },
 
   async getDevices(uid: string): Promise<Device[]> {
     const snapshot = await getDocs(collection(db, `users/${uid}/devices`))
 
-    return snapshot.docs.map((entry) => ({
-      id: entry.id,
-      ...(entry.data() as DeviceInput),
-    }))
+    return snapshot.docs.map((entry) => normalizeDeviceFromSnapshot(entry.id, entry.data() as Record<string, unknown>))
+  },
+
+  async getDeviceById(uid: string, deviceId: string): Promise<Device> {
+    const snapshot = await getDoc(doc(db, `users/${uid}/devices`, deviceId))
+
+    if (!snapshot.exists()) {
+      throw new Error('Device not found')
+    }
+
+    return normalizeDeviceFromSnapshot(snapshot.id, snapshot.data() as Record<string, unknown>)
+  },
+
+  async createUser(payload: UserCreateInput): Promise<User> {
+    const created_at = new Date().toISOString()
+    const userPayload = {
+      uid: payload.uid.trim(),
+      username: payload.username.trim(),
+      role: payload.role,
+      created_at,
+    }
+
+    try {
+      await setDoc(doc(db, 'users', userPayload.uid), userPayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+
+    return userPayload
+  },
+
+  async updateUser(uid: string, payload: Partial<UserInput>): Promise<void> {
+    const updatePayload = stripUndefinedValues({
+      ...(typeof payload.username === 'string' ? { username: payload.username.trim() } : {}),
+      ...(payload.role ? { role: payload.role } : {}),
+    })
+
+    try {
+      await updateDoc(doc(db, 'users', uid), updatePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+  },
+
+  async deleteUser(uid: string): Promise<void> {
+    try {
+      const devicesSnapshot = await getDocs(collection(db, `users/${uid}/devices`))
+      await Promise.all(devicesSnapshot.docs.map((entry) => deleteDoc(entry.ref)))
+      await deleteDoc(doc(db, 'users', uid))
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+  },
+
+  async createDevice(uid: string, payload: DeviceInput): Promise<Device> {
+    const normalizedPayload = normalizeDeviceInput(payload)
+    const id = doc(collection(db, `users/${uid}/devices`)).id
+    const firestorePayload: DeviceInput = {
+      device_name: normalizedPayload.device_name ?? 'New device',
+      playlist: normalizedPayload.playlist ?? [],
+      tracking_history: normalizedPayload.tracking_history ?? [],
+    }
+
+    try {
+      await setDoc(doc(db, `users/${uid}/devices`, id), firestorePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+
+    return {
+      id,
+      ...firestorePayload,
+    }
+  },
+
+  async updateDevice(uid: string, deviceId: string, payload: Partial<DeviceInput>): Promise<void> {
+    const normalizedPayload = normalizeDeviceInput(payload)
+    const updatePayload = stripUndefinedValues({
+      ...(typeof normalizedPayload.device_name === 'string' ? { device_name: normalizedPayload.device_name } : {}),
+      ...(Array.isArray(normalizedPayload.playlist) ? { playlist: normalizedPayload.playlist } : {}),
+      ...(Array.isArray(normalizedPayload.tracking_history) ? { tracking_history: normalizedPayload.tracking_history } : {}),
+    })
+
+    try {
+      await updateDoc(doc(db, `users/${uid}/devices`, deviceId), updatePayload)
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
+  },
+
+  async deleteDevice(uid: string, deviceId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, `users/${uid}/devices`, deviceId))
+    } catch (error) {
+      throw mapFirestoreWriteError(error)
+    }
   },
 
   async getReports(filters: ReportsQueryFilters = {}): Promise<Report[]> {

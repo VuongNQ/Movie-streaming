@@ -57,14 +57,35 @@ export interface User {
   username: string
   role: UserRole
   created_at: string
+  account_status?: 'active' | 'disabled'
+  device_count?: number
 }
 
 export type UserInput = Omit<User, 'uid' | 'created_at'>
+export type UserCreateInput = Pick<User, 'uid' | 'username' | 'role'>
+
+export interface AdminSetUserDisabledInput {
+  uid: string
+  disabled: boolean
+}
+
+export interface AdminDeleteAuthUserInput {
+  uid: string
+}
+
+export interface AdminGeneratePasswordResetLinkInput {
+  uid: string
+}
 
 export interface DeviceTrackingHistory {
   movie_id: string
   last_watched_at: string
   current_position_seconds: number
+}
+
+export interface DeviceTrackingView extends DeviceTrackingHistory {
+  movie_title: string
+  stream_link?: string
 }
 
 export interface Device {

@@ -24,6 +24,13 @@ Use this file when implementing or refactoring admin-dashboard code. Keep archit
 - Keep movie stream editing logic in form components and use typed value transformers.
 - Reports management UI is currently read-only in admin-dashboard (filters + listing only, no report action/status mutation controls).
 
+## User Auth Lifecycle Rules
+- User creation in admin-dashboard is Firestore profile creation only and requires UID from a manually provisioned Firebase Auth account.
+- Do not collect or persist password values in the dashboard for user creation.
+- Auth lifecycle actions in dashboard must call Cloud Functions through `httpsCallable` wrappers (disable/enable, password reset link, delete).
+- Avoid raw browser `fetch` calls directly to callable endpoint URLs.
+- Keep `account_status` presentation aligned with server-side auth disable state updates.
+
 ## hls.js Integration Rules (Official API Aligned)
 Source: https://hlsjs.video-dev.org/api-docs/hls.js.hls
 
