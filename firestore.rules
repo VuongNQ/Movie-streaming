@@ -40,7 +40,9 @@ service cloud.firestore {
 
     function isValidMovieWrite(data) {
       return data.id is string && data.id.size() > 0 &&
-        data.title is string && data.title.size() > 0 &&
+        data.title_raw is string && data.title_raw.size() > 0 &&
+        (!('title' in data) || (data.title is string && data.title == data.title_raw)) &&
+        (!('title_vietnamese' in data) || data.title_vietnamese is string) &&
         data.description is string &&
         data.thumbnail_link is string &&
         data.background_link is string &&
@@ -51,6 +53,7 @@ service cloud.firestore {
         isStringArray(data.genres) &&
         data.audio_types is list &&
         data.audio_types.hasOnly(['dubbing', 'subtitle']) &&
+        (!('franchise_movie_ids' in data) || data.franchise_movie_ids is list) &&
         isValidStreamConnections(data.stream_connections) &&
         (!('youtube_trailer_link' in data) || data.youtube_trailer_link is string);
     }

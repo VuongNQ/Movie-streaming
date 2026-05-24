@@ -50,7 +50,7 @@ For users/{uid}/devices/{deviceId} writes by non-admin:
 
 For movies/{movieId} writes:
 - Admin only.
-- Current rules enforce document id alignment (request.resource.data.id == movieId), movie type enum, and audio_types values.
+- Current rules enforce document id alignment (request.resource.data.id == movieId), title_raw presence, optional title_vietnamese string, optional franchise_movie_ids list, movie type enum, and audio_types values.
 - Current rules validate stream_connections only at the list level, not each nested object field. Treat stronger validation as future policy work until the rules are updated.
 
 ## Rules Implementation Expectations

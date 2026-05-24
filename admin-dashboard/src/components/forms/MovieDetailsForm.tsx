@@ -81,6 +81,7 @@ export function MovieDetailsForm({
     name: 'stream_connections',
   })
   const selectedGenres = watch('genres') ?? []
+  const selectedType = watch('type')
 
   async function handleFormSubmit(values: MovieFormValues) {
     try {
@@ -164,9 +165,15 @@ export function MovieDetailsForm({
   return (
     <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(handleFormSubmit)}>
       <div className="grid gap-2 md:col-span-2">
-        <Label htmlFor={`${idPrefix}-title`}>Title</Label>
-        <Input id={`${idPrefix}-title`} placeholder="Movie title" {...register('title')} />
-        {errors.title ? <small className="text-xs text-red-600">{errors.title.message}</small> : null}
+        <Label htmlFor={`${idPrefix}-title_raw`}>Title (Raw)</Label>
+        <Input id={`${idPrefix}-title_raw`} placeholder="Original movie title" {...register('title_raw')} />
+        {errors.title_raw ? <small className="text-xs text-red-600">{errors.title_raw.message}</small> : null}
+      </div>
+
+      <div className="grid gap-2 md:col-span-2">
+        <Label htmlFor={`${idPrefix}-title_vietnamese`}>Title (Vietnamese, optional)</Label>
+        <Input id={`${idPrefix}-title_vietnamese`} placeholder="Vietnamese title" {...register('title_vietnamese')} />
+        {errors.title_vietnamese ? <small className="text-xs text-red-600">{errors.title_vietnamese.message}</small> : null}
       </div>
 
       <div className="grid gap-2 md:col-span-2">
@@ -212,6 +219,22 @@ export function MovieDetailsForm({
         <Input id={`${idPrefix}-episode_count`} type="number" {...register('episode_count')} />
         {errors.episode_count ? <small className="text-xs text-red-600">{errors.episode_count.message}</small> : null}
       </div>
+
+      {selectedType === 'franchise' ? (
+        <div className="grid gap-2 md:col-span-2">
+          <Label htmlFor={`${idPrefix}-franchise_movie_ids_csv`}>Franchise movie IDs (comma-separated)</Label>
+          <Input
+            id={`${idPrefix}-franchise_movie_ids_csv`}
+            placeholder="movie-a-id, movie-b-id"
+            {...register('franchise_movie_ids_csv')}
+          />
+          {errors.franchise_movie_ids_csv ? (
+            <small className="text-xs text-red-600">{errors.franchise_movie_ids_csv.message}</small>
+          ) : (
+            <small className="text-xs text-muted-foreground">Use existing movie document IDs that belong to this franchise.</small>
+          )}
+        </div>
+      ) : null}
 
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-actors_csv`}>Actors (comma-separated)</Label>

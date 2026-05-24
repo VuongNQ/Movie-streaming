@@ -32,9 +32,9 @@ function mapFirestoreWriteError(error: unknown): Error {
   return new Error('Firestore write failed.')
 }
 
-function buildMovieId(title: string): string {
+function buildMovieId(titleRaw: string): string {
   const randomSuffix = doc(collection(db, 'movies')).id
-  const slug = title
+  const slug = titleRaw
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -83,9 +83,25 @@ function stripUndefinedValues<T>(value: T): T {
 }
 
 function normalizeMovieFromSnapshot(id: string, data: MovieInput): Movie {
+  const normalizedTitleRaw =
+    typeof data.title_raw === 'string' && data.title_raw.trim().length > 0
+      ? data.title_raw
+      : typeof data.title === 'string' && data.title.trim().length > 0
+        ? data.title
+        : id
+
+  const franchiseMovieIds = Array.isArray(data.franchise_movie_ids)
+    ? data.franchise_movie_ids.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : undefined
+
   return {
     id,
     ...data,
+    title: normalizedTitleRaw,
+    title_raw: normalizedTitleRaw,
+    title_vietnamese:
+      typeof data.title_vietnamese === 'string' && data.title_vietnamese.trim().length > 0 ? data.title_vietnamese : undefined,
+    franchise_movie_ids: franchiseMovieIds,
     created_at: data.created_at ? toIsoString(data.created_at) : undefined,
     last_updated: data.last_updated ? toIsoString(data.last_updated) : undefined,
   }
@@ -93,8 +109,12 @@ function normalizeMovieFromSnapshot(id: string, data: MovieInput): Movie {
 
 export const firestore = {
   async getMovies(): Promise<Movie[]> {
-    const snapshot = await getDocs(query(collection(db, 'movies'), orderBy('title', 'asc')))
-    return snapshot.docs.map((entry) => normalizeMovieFromSnapshot(entry.id, entry.data() as MovieInput))
+    const snapshot = await getDocs(collection(db, 'movies'))
+    const collator = new Intl.Collator('vi', { sensitivity: 'base' })
+
+    return snapshot.docs
+      .map((entry) => normalizeMovieFromSnapshot(entry.id, entry.data() as MovieInput))
+      .sort((left, right) => collator.compare(left.title_vietnamese ?? left.title_raw, right.title_vietnamese ?? right.title_raw))
   },
 
   async getMovieById(id: string): Promise<Movie> {
@@ -109,9 +129,11 @@ export const firestore = {
 
   async createMovie(payload: MovieInput): Promise<Movie> {
     const now = new Date().toISOString()
-    const id = buildMovieId(payload.title)
+    const id = buildMovieId(payload.title_raw)
     const firestorePayload = stripUndefinedValues({
       ...payload,
+      // Keep legacy title mirror during migration.
+      title: payload.title_raw,
       id,
       created_at: payload.created_at ?? now,
       last_updated: now,

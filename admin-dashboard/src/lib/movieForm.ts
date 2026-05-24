@@ -73,7 +73,8 @@ function parseJsonObject(value: string) {
 
 export const movieFormSchema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required.'),
+    title_raw: z.string().trim().min(1, 'Raw title is required.'),
+    title_vietnamese: z.string().trim().default(''),
     description: z.string().trim().min(1, 'Description is required.'),
     thumbnail_link: z.url('Thumbnail URL is invalid.'),
     background_link: z.url('Background URL is invalid.'),
@@ -83,6 +84,7 @@ export const movieFormSchema = z
     actors_csv: z.string().default(''),
     genres: z.array(z.string().trim().min(1)).default([]),
     audio_types: z.array(audioTypeSchema).default([]),
+    franchise_movie_ids_csv: z.string().trim().default(''),
     youtube_trailer_link: z.string().trim().default(''),
     stream_connections: z.array(streamConnectionFormSchema).default([]),
   })
@@ -108,6 +110,7 @@ export const movieFormSchema = z
         })
       }
     })
+
   })
   .transform((value): MovieInput => {
     const streamConnections = value.stream_connections.map((connection) => {
@@ -130,7 +133,9 @@ export const movieFormSchema = z
     const validStreamConnections = streamConnectionSchema.array().parse(streamConnections)
 
     const payload: MovieInput = {
-      title: value.title,
+      // Keep legacy title mirror during migration.
+      title: value.title_raw,
+      title_raw: value.title_raw,
       description: value.description,
       thumbnail_link: value.thumbnail_link,
       background_link: value.background_link,
@@ -143,6 +148,12 @@ export const movieFormSchema = z
       stream_connections: validStreamConnections,
     }
 
+    if (value.title_vietnamese.length > 0) {
+      payload.title_vietnamese = value.title_vietnamese
+    }
+
+    payload.franchise_movie_ids = value.type === 'franchise' ? parseCommaList(value.franchise_movie_ids_csv) : []
+
     if (value.youtube_trailer_link.length > 0) {
       payload.youtube_trailer_link = value.youtube_trailer_link
     }
@@ -154,7 +165,8 @@ export type MovieFormValues = z.output<typeof movieFormSchema>
 
 export function movieToFormInput(movie: Movie): MovieFormInput {
   return {
-    title: movie.title,
+    title_raw: movie.title_raw,
+    title_vietnamese: movie.title_vietnamese ?? '',
     description: movie.description,
     thumbnail_link: movie.thumbnail_link,
     background_link: movie.background_link,
@@ -164,6 +176,7 @@ export function movieToFormInput(movie: Movie): MovieFormInput {
     actors_csv: movie.actors.join(', '),
     genres: movie.genres,
     audio_types: movie.audio_types,
+    franchise_movie_ids_csv: (movie.franchise_movie_ids ?? []).join(', '),
     youtube_trailer_link: movie.youtube_trailer_link ?? '',
     stream_connections: movie.stream_connections.map((connection) => ({
       server_name: connection.server_name,
@@ -177,7 +190,8 @@ export function movieToFormInput(movie: Movie): MovieFormInput {
 
 export function emptyMovieFormInput(): MovieFormInput {
   return {
-    title: '',
+    title_raw: '',
+    title_vietnamese: '',
     description: '',
     thumbnail_link: '',
     background_link: '',
@@ -187,6 +201,7 @@ export function emptyMovieFormInput(): MovieFormInput {
     actors_csv: '',
     genres: [],
     audio_types: [],
+    franchise_movie_ids_csv: '',
     youtube_trailer_link: '',
     stream_connections: [],
   }

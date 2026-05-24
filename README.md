@@ -5,12 +5,12 @@ Project streaming video on TV, with 3 main components:
 
 Technical information:
 - DB: using Firestore to store: movies, user login, tracking video play per device.
-A move info will be stored a collection with unique ID is generate by title and combine with uuid, include infos:
-+ id, title, description, thumbnail link, background link, link embed preview trailer YouTube (options)
+A move info will be stored a collection with unique ID is generate by title_raw and combine with uuid, include infos:
++ id, title_raw (required), title_vietnamese (optional), description, thumbnail link, background link, link embed preview trailer YouTube (options)
 + type of movie: single movie or TV series, TV franchise
 + type of genre: action, crime, document, horror, animate …
 + year of movie
-+ number of movie in session or number of movie in franchise
++ number of movie in session or number of movie in franchise; with type franchise, store linked movie ids in franchise_movie_ids
 + tags actor
 + tags dubbing or subtitles
 + a collections link steam of movie include: name server, link with dubbing or subtitles, status of link(dead or live), info of metadata info of link m3u8 or HLS.

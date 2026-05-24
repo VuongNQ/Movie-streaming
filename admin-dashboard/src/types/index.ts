@@ -16,7 +16,10 @@ export interface StreamConnection {
 
 export interface Movie {
   id: string
-  title: string
+  // Legacy mirror for old clients/documents. New writes should use title_raw.
+  title?: string
+  title_raw: string
+  title_vietnamese?: string
   description: string
   thumbnail_link: string
   background_link: string
@@ -26,6 +29,7 @@ export interface Movie {
   actors: string[]
   audio_types: AudioType[]
   genres: string[]
+  franchise_movie_ids?: string[]
   stream_connections: StreamConnection[]
   created_at?: string
   last_updated?: string

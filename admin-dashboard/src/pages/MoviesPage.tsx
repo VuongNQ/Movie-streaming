@@ -29,6 +29,10 @@ function formatDateLabel(value?: string): string | null {
   return parsed.toLocaleString()
 }
 
+function getMovieDisplayTitle(rawTitle: string, vietnameseTitle?: string): string {
+  return vietnameseTitle && vietnameseTitle.trim().length > 0 ? `${vietnameseTitle} (${rawTitle})` : rawTitle
+}
+
 export function MoviesPage() {
   const { data, isLoading, error } = useMovies()
   const createMovie = useCreateMovie()
@@ -168,13 +172,17 @@ export function MoviesPage() {
 
       <div className="grid gap-3">
         {movies.map((movie) => (
+          (() => {
+            const movieDisplayTitle = getMovieDisplayTitle(movie.title_raw, movie.title_vietnamese)
+
+            return (
           <Card key={movie.id} className="border-border/80 shadow-none">
             <CardHeader className="pb-3">
               <div className="flex items-start gap-4">
                 <div className="h-auto max-h-48 w-32 shrink-0 overflow-hidden rounded-md border bg-muted">
                   <img
                     src={movie.thumbnail_link}
-                    alt={`${movie.title} thumbnail`}
+                    alt={`${movieDisplayTitle} thumbnail`}
                     className="h-full w-full object-cover"
                     loading="lazy"
                     onError={(event) => {
@@ -185,7 +193,7 @@ export function MoviesPage() {
 
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-start justify-between gap-3">
-                    <CardTitle className="text-base">{movie.title}</CardTitle>
+                    <CardTitle className="text-base">{movieDisplayTitle}</CardTitle>
                     <Badge variant="secondary">{movie.type}</Badge>
                   </div>
 
@@ -247,7 +255,7 @@ export function MoviesPage() {
                     size="sm"
                     disabled={deleteMovie.isPending}
                     onClick={() => {
-                      void handleRemoveMovie(movie.id, movie.title)
+                      void handleRemoveMovie(movie.id, movieDisplayTitle)
                     }}
                   >
                     {deleteMovie.isPending ? 'Removing...' : 'Remove'}
@@ -256,6 +264,8 @@ export function MoviesPage() {
               )}
             </CardContent>
           </Card>
+            )
+          })()
         ))}
       </div>
     </section>

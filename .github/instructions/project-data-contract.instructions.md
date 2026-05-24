@@ -17,8 +17,8 @@ Do not create alternate collection names for the same domain unless explicitly r
 
 ## Movie Document Contract
 Required fields:
-- id: string, unique slug-like id derived from title + UUID suffix.
-- title: string, non-empty.
+- id: string, unique slug-like id derived from title_raw + UUID suffix.
+- title_raw: string, non-empty and used for id generation.
 - description: string.
 - thumbnail_link: string URL.
 - background_link: string URL.
@@ -33,7 +33,9 @@ Required fields:
 - last_updated: ISO-8601 UTC string in the current admin-dashboard write path.
 
 Optional fields:
+- title_vietnamese: string (optional).
 - youtube_trailer_link: string URL (optional).
+- franchise_movie_ids: string array (optional, used to link related movies in a franchise).
 
 Stream object shape:
 - server_name: string.
@@ -72,7 +74,7 @@ Current rules note:
 - Keep field names exactly as defined above (snake_case where shown).
 - Do not silently rename fields between React/Kotlin models and Firestore documents.
 - Preserve enum values exactly; avoid alias values.
-- Keep movie document ids aligned with the stored id field. The current admin-dashboard service generates the document id and writes the same value into payload.id.
+- Keep movie document ids aligned with the stored id field. The current admin-dashboard service generates the document id from title_raw and writes the same value into payload.id.
 - Validate URLs, enum values, and required arrays before write operations.
 - Prefer additive schema changes with backward compatibility.
 
