@@ -1,5 +1,7 @@
-import { readFile } from 'node:fs/promises'
+import './env.js'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import process from 'node:process'
+import { join } from 'node:path'
 import { chromium } from 'playwright'
 import { buildServerName, discoverMovieLinks, resolveAdapter } from './adapters.js'
 import { upsertMovieStream } from './firestore.js'
@@ -7,6 +9,7 @@ import { upsertMovieStream } from './firestore.js'
 const CONCURRENCY_LIMIT = 3
 const M3U8_TIMEOUT_MS = 15000
 const HEADLESS = process.env.CRAWLER_HEADLESS !== 'false'
+const DRAFT_OUTPUT_DIR = process.env.CRAWLER_DRAFT_DIR || './crawl-drafts'
 
 function parseArgs(argv) {
   return argv.reduce((result, entry) => {
@@ -50,6 +53,38 @@ function normalizeMetadata(scraped, fallbackTitle) {
     youtube_trailer_link: typeof scraped.youtube_trailer_link === 'string' ? scraped.youtube_trailer_link.trim() : undefined,
     franchise_movie_ids: Array.isArray(scraped.franchise_movie_ids) ? scraped.franchise_movie_ids : [],
   }
+}
+
+function sanitizeFileName(value) {
+  return String(value || 'movie')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'movie'
+}
+
+async function saveDraftCrawlData({ movieUrl, movie, streamConnection, error }) {
+  await mkdir(DRAFT_OUTPUT_DIR, { recursive: true })
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const baseName = sanitizeFileName(movie.id || movie.title_raw || movieUrl)
+  const draftPath = join(DRAFT_OUTPUT_DIR, `${baseName}-${timestamp}.json`)
+
+  const payload = {
+    source_url: movieUrl,
+    movie,
+    stream_connection: streamConnection,
+    error: {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack ?? null : null,
+    },
+    saved_at: new Date().toISOString(),
+  }
+
+  await writeFile(draftPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  return draftPath
 }
 
 async function maybeFetchApiMetadata(page, adapter, movieUrl) {
@@ -118,6 +153,86 @@ async function verifyCors(page, streamUrl) {
   }, streamUrl)
 }
 
+async function findWatchRedirectUrl(page, adapter) {
+  const selectors = Array.isArray(adapter.watchRedirectSelectors) ? adapter.watchRedirectSelectors : []
+  const textHints = Array.isArray(adapter.watchRedirectTextHints) ? adapter.watchRedirectTextHints : []
+
+  if (selectors.length === 0 && textHints.length === 0) {
+    return null
+  }
+
+  return page.evaluate(({ redirectSelectors, redirectTextHints }) => {
+    const toAbsoluteUrl = (href) => {
+      try {
+        return new URL(href, window.location.href).toString()
+      } catch (_error) {
+        return null
+      }
+    }
+
+    const hints = redirectTextHints.map((value) => value.toLowerCase())
+    const candidates = []
+    const seen = new Set()
+
+    for (const selector of redirectSelectors) {
+      const nodes = document.querySelectorAll(selector)
+      for (const node of nodes) {
+        if (!(node instanceof HTMLAnchorElement)) {
+          continue
+        }
+
+        if (seen.has(node)) {
+          continue
+        }
+
+        seen.add(node)
+        candidates.push(node)
+      }
+    }
+
+    if (candidates.length === 0) {
+      const allAnchors = document.querySelectorAll('a[href]')
+      for (const anchor of allAnchors) {
+        if (!(anchor instanceof HTMLAnchorElement)) {
+          continue
+        }
+
+        if (!seen.has(anchor)) {
+          seen.add(anchor)
+          candidates.push(anchor)
+        }
+      }
+    }
+
+    for (const anchor of candidates) {
+      const href = anchor.getAttribute('href')
+      if (!href || href.trim().length === 0) {
+        continue
+      }
+
+      const hrefLower = href.trim().toLowerCase()
+      const text = typeof anchor.textContent === 'string' ? anchor.textContent.trim().toLowerCase() : ''
+      const absoluteUrl = toAbsoluteUrl(href.trim())
+      if (!absoluteUrl) {
+        continue
+      }
+
+      if (
+        hrefLower.includes('/tap-')
+        || hrefLower.includes('/xem-phim')
+        || hints.some((hint) => text.includes(hint))
+      ) {
+        return absoluteUrl
+      }
+    }
+
+    return null
+  }, {
+    redirectSelectors: selectors,
+    redirectTextHints: textHints,
+  })
+}
+
 async function crawlMovie(browser, adapter, movieUrl) {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -134,15 +249,34 @@ async function crawlMovie(browser, adapter, movieUrl) {
     }, titleFallback)
 
     const waitForM3u8Promise = waitForM3u8(page)
-    const watchButton = page.locator(adapter.watchButtonSelector).first()
-    if ((await watchButton.count()) > 0) {
-      await Promise.all([waitForM3u8Promise, watchButton.click()])
+    const watchRedirectUrl = await findWatchRedirectUrl(page, adapter)
+    if (watchRedirectUrl) {
+      await Promise.all([waitForM3u8Promise, page.goto(watchRedirectUrl, { waitUntil: 'networkidle' })])
       await page.waitForLoadState('networkidle').catch(() => undefined)
+    } else {
+      const watchButton = page.locator(adapter.watchButtonSelector).first()
+      if ((await watchButton.count()) > 0) {
+        await Promise.all([waitForM3u8Promise, watchButton.click()])
+        await page.waitForLoadState('networkidle').catch(() => undefined)
+      }
+    }
+
+    if (watchRedirectUrl) {
+      await page.waitForTimeout(1000).catch(() => undefined)
+    } else {
+      const watchButton = page.locator(adapter.watchButtonSelector).first()
+      if ((await watchButton.count()) > 0) {
+        await page.waitForTimeout(1000).catch(() => undefined)
+      }
     }
 
     const streamUrl = await waitForM3u8Promise
     if (!streamUrl) {
-      console.warn(`[crawler] No .m3u8 captured for ${movieUrl}`)
+      if (watchRedirectUrl) {
+        console.warn(`[crawler] No .m3u8 captured after redirect for ${movieUrl} -> ${watchRedirectUrl}`)
+      } else {
+        console.warn(`[crawler] No .m3u8 captured for ${movieUrl}`)
+      }
     }
 
     const corsResult = await verifyCors(page, streamUrl)
@@ -155,6 +289,7 @@ async function crawlMovie(browser, adapter, movieUrl) {
           status: corsResult.blockedByCors ? 'dead' : 'live',
           metadata: {
             source_page: movieUrl,
+            watch_page: watchRedirectUrl || page.url(),
             cors_status: corsResult.status,
             cors_error: corsResult.error,
             cors_blocked: corsResult.blockedByCors,
@@ -167,13 +302,27 @@ async function crawlMovie(browser, adapter, movieUrl) {
           status: 'dead',
           metadata: {
             source_page: movieUrl,
+            watch_page: watchRedirectUrl || page.url(),
             cors_status: null,
             cors_error: 'm3u8-not-found',
             cors_blocked: false,
           },
         }
 
-    const writeResult = await upsertMovieStream(movie, streamConnection)
+    let writeResult
+    try {
+      writeResult = await upsertMovieStream(movie, streamConnection)
+    } catch (error) {
+      const draftPath = await saveDraftCrawlData({ movieUrl, movie, streamConnection, error })
+      console.warn(`[crawler] Firestore write failed for ${movieUrl}; draft saved to ${draftPath}`)
+      return {
+        movieUrl,
+        writeResult: null,
+        draftPath,
+        streamUrl,
+      }
+    }
+
     return {
       movieUrl,
       writeResult,

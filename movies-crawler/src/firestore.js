@@ -1,8 +1,15 @@
+import './env.js'
 import { readFile } from 'node:fs/promises'
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app'
-import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 
 const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || 'moviestreaming'
+const PROJECT_ID =
+  process.env.FIREBASE_PROJECT_ID ||
+  process.env.FIRESTORE_PROJECT_ID ||
+  process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.GCLOUD_PROJECT ||
+  null
 
 function buildMovieId(titleRaw) {
   const slug = titleRaw
@@ -20,21 +27,32 @@ function buildMovieId(titleRaw) {
 async function loadCredential() {
   const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (!serviceAccountPath) {
-    return applicationDefault()
+    return {
+      credential: applicationDefault(),
+      projectId: PROJECT_ID,
+    }
   }
 
   const raw = await readFile(serviceAccountPath, 'utf8')
-  return cert(JSON.parse(raw))
+  const serviceAccount = JSON.parse(raw)
+
+  return {
+    credential: cert(serviceAccount),
+    projectId: serviceAccount.project_id || PROJECT_ID,
+  }
 }
 
 async function getDb() {
+  let app = getApps()[0]
   if (getApps().length === 0) {
-    initializeApp({
-      credential: await loadCredential(),
+    const { credential, projectId } = await loadCredential()
+    app = initializeApp({
+      credential,
+      ...(projectId ? { projectId } : {}),
     })
   }
 
-  return getFirestore(undefined, DATABASE_ID)
+  return getFirestore(app, DATABASE_ID)
 }
 
 function nowIso() {
@@ -55,14 +73,20 @@ function normalizeNewMoviePayload(scrapedMovie, streamConnection) {
     ? scrapedMovie.title_raw.trim()
     : 'Untitled movie'
 
+  const titleVietnamese =
+    typeof scrapedMovie.title_vietnamese === 'string' && scrapedMovie.title_vietnamese.trim().length > 0
+      ? scrapedMovie.title_vietnamese.trim()
+      : null
+
+  const youtubeTrailerLink =
+    typeof scrapedMovie.youtube_trailer_link === 'string' && scrapedMovie.youtube_trailer_link.trim().length > 0
+      ? scrapedMovie.youtube_trailer_link.trim()
+      : null
+
   return {
     id: scrapedMovie.id ?? buildMovieId(titleRaw),
     title: titleRaw,
     title_raw: titleRaw,
-    title_vietnamese:
-      typeof scrapedMovie.title_vietnamese === 'string' && scrapedMovie.title_vietnamese.trim().length > 0
-        ? scrapedMovie.title_vietnamese.trim()
-        : FieldValue.delete(),
     description: typeof scrapedMovie.description === 'string' ? scrapedMovie.description.trim() : '',
     thumbnail_link: typeof scrapedMovie.thumbnail_link === 'string' ? scrapedMovie.thumbnail_link.trim() : '',
     background_link: typeof scrapedMovie.background_link === 'string' ? scrapedMovie.background_link.trim() : '',
@@ -72,14 +96,12 @@ function normalizeNewMoviePayload(scrapedMovie, streamConnection) {
     actors: ensureArray(scrapedMovie.actors),
     audio_types: ensureArray(scrapedMovie.audio_types).filter((value) => value === 'dubbing' || value === 'subtitle'),
     genres: ensureArray(scrapedMovie.genres),
-    youtube_trailer_link:
-      typeof scrapedMovie.youtube_trailer_link === 'string' && scrapedMovie.youtube_trailer_link.trim().length > 0
-        ? scrapedMovie.youtube_trailer_link.trim()
-        : FieldValue.delete(),
     franchise_movie_ids: ensureArray(scrapedMovie.franchise_movie_ids),
     stream_connections: streamConnection ? [streamConnection] : [],
     created_at: timestamp,
     last_updated: timestamp,
+    ...(titleVietnamese ? { title_vietnamese: titleVietnamese } : {}),
+    ...(youtubeTrailerLink ? { youtube_trailer_link: youtubeTrailerLink } : {}),
   }
 }
 

@@ -4,6 +4,7 @@ import { MovieSearchFiltersSection } from '../components/forms/MovieSearchFilter
 import { Badge } from '../components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import { HlsPreviewDialog } from '../components/ui/hls-preview-dialog'
 import { firebaseRuntimeConfig } from '../lib/firebase'
 import { emptyMovieFormInput, movieToFormInput } from '../lib/movieForm'
 import { useAuthPreflight, useCreateMovie, useDeleteMovie, useMovies, useUpdateMovie } from '../lib/queries'
@@ -53,6 +54,8 @@ export function MoviesPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null)
   const [isMovieFormDirty, setIsMovieFormDirty] = useState(false)
+  const [expandedStreamMovieId, setExpandedStreamMovieId] = useState<string | null>(null)
+  const [previewStreamTarget, setPreviewStreamTarget] = useState<{ title: string; serverName: string; link: string } | null>(null)
   const permissionError = [createMovie.error, updateMovie.error, deleteMovie.error].find(
     (candidate) =>
       candidate instanceof Error &&
@@ -344,11 +347,17 @@ export function MoviesPage() {
                       : null}
 
                     {movie.stream_connections.length > 0 ? (
-                      Array.from(new Set(movie.stream_connections.map((stream) => stream.server_name))).map((serverName) => (
-                        <Badge key={`${movie.id}-${serverName}`} variant="outline">
-                          {serverName}
-                        </Badge>
-                      ))
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() =>
+                          setExpandedStreamMovieId((current) => (current === movie.id ? null : movie.id))
+                        }
+                      >
+                        Streams ({movie.stream_connections.length})
+                      </Button>
                     ) : (
                       <Badge variant="outline">No streams</Badge>
                     )}
@@ -362,6 +371,43 @@ export function MoviesPage() {
                   ) : null}
                 </div>
               </div>
+
+              {expandedStreamMovieId === movie.id && movie.stream_connections.length > 0 ? (
+                <div className="mt-3 space-y-1 border-t border-border/60 pt-3">
+                  {movie.stream_connections.map((stream, streamIndex) => (
+                    <div
+                      key={`${movie.id}-stream-${streamIndex}`}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/40"
+                    >
+                      <span className="min-w-0 flex-1 truncate font-medium">{stream.server_name}</span>
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {stream.type}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 text-xs${stream.status === 'live' ? ' border-green-500 text-green-700' : ' border-red-400 text-red-600'}`}
+                      >
+                        {stream.status}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 shrink-0 px-2 text-xs"
+                        onClick={() =>
+                          setPreviewStreamTarget({
+                            title: `${movieDisplayTitle} — ${stream.server_name}`,
+                            serverName: stream.server_name,
+                            link: stream.link,
+                          })
+                        }
+                      >
+                        Preview
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </CardHeader>
             <CardContent className="space-y-3 pt-0">
               {editingMovieId === movie.id ? (
@@ -423,6 +469,13 @@ export function MoviesPage() {
           })()
         ))}
       </div>
+
+      <HlsPreviewDialog
+        open={previewStreamTarget !== null}
+        title={previewStreamTarget?.title ?? ''}
+        streamUrl={previewStreamTarget?.link ?? ''}
+        onClose={() => setPreviewStreamTarget(null)}
+      />
     </section>
   )
 }

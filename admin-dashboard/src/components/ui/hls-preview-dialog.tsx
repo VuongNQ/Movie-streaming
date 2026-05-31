@@ -14,7 +14,7 @@ interface HlsPreviewDialogProps {
   title: string
   streamUrl: string
   onClose: () => void
-  onResolved: (result: HlsPreviewResult) => void
+  onResolved?: (result: HlsPreviewResult) => void
 }
 
 type PreviewState = 'idle' | 'loading' | 'live' | 'dead'
@@ -70,14 +70,14 @@ function isCodecUnsupportedError(mediaCode: number | undefined, mediaMessage: st
 
 export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }: HlsPreviewDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const onResolvedRef = useRef(onResolved)
+  const onResolvedRef = useRef<((result: HlsPreviewResult) => void) | null | undefined>(onResolved)
   const previewCacheRef = useRef<Map<string, CachedPreviewState>>(new Map())
   const [previewState, setPreviewState] = useState<PreviewState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [metadata, setMetadata] = useState<Record<string, unknown> | null>(null)
 
   useEffect(() => {
-    onResolvedRef.current = onResolved
+    onResolvedRef.current = onResolved ?? null
   }, [onResolved])
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     if (!url) {
       const message = 'Stream link is empty. Enter a valid HLS URL before previewing.'
       queueUiState('dead', message, null)
-      onResolvedRef.current({ status: 'dead', errorMessage: message })
+      onResolvedRef.current?.({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -129,14 +129,14 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     } catch {
       const message = 'Stream link is invalid. Please provide a full URL.'
       queueUiState('dead', message, null)
-      onResolvedRef.current({ status: 'dead', errorMessage: message })
+      onResolvedRef.current?.({ status: 'dead', errorMessage: message })
       return
     }
 
     if (window.location.protocol === 'https:' && parsedUrl.protocol === 'http:') {
       const message = 'Mixed content blocked: HTTP streams cannot be previewed from an HTTPS admin page.'
       queueUiState('dead', message, null)
-      onResolvedRef.current({ status: 'dead', errorMessage: message })
+      onResolvedRef.current?.({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -144,7 +144,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
     if (!video) {
       const message = 'Video element is unavailable. Close and reopen preview.'
       queueUiState('dead', message, null)
-      onResolvedRef.current({ status: 'dead', errorMessage: message })
+      onResolvedRef.current?.({ status: 'dead', errorMessage: message })
       return
     }
 
@@ -202,7 +202,7 @@ export function HlsPreviewDialog({ open, title, streamUrl, onClose, onResolved }
         errorMessage: result.errorMessage ?? '',
         metadata: mergedMetadata ?? null,
       })
-      onResolvedRef.current({
+      onResolvedRef.current?.({
         ...result,
         metadata: mergedMetadata,
       })

@@ -129,6 +129,134 @@ function createDefaultDetailExtractor(config) {
   }
 }
 
+function createJsonLdDetailExtractor(config) {
+  return async function extractDetails(page) {
+    const jsonLdDetails = await page.evaluate(() => {
+      const parseJsonLd = (scriptText) => {
+        try {
+          return JSON.parse(scriptText)
+        } catch (_error) {
+          return null
+        }
+      }
+
+      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+      for (const script of scripts) {
+        const rawText = typeof script.textContent === 'string' ? script.textContent.trim() : ''
+        if (!rawText) {
+          continue
+        }
+
+        const parsed = parseJsonLd(rawText)
+        const candidates = Array.isArray(parsed) ? parsed : [parsed]
+
+        for (const candidate of candidates) {
+          if (!candidate || typeof candidate !== 'object') {
+            continue
+          }
+
+          const typeValue = candidate['@type']
+          const typeName = Array.isArray(typeValue)
+            ? typeValue.map((value) => String(value).toLowerCase())
+            : [String(typeValue).toLowerCase()]
+
+          if (!typeName.includes('movie')) {
+            continue
+          }
+
+          const imageValue = candidate.image || candidate.thumbnailUrl || candidate.thumbnailURL || ''
+          const image = Array.isArray(imageValue) ? imageValue.find((value) => typeof value === 'string' && value.trim()) : imageValue
+          const actorList = Array.isArray(candidate.actor) ? candidate.actor : []
+          const genreList = Array.isArray(candidate.genre) ? candidate.genre : candidate.genre ? [candidate.genre] : []
+
+          return {
+            title_raw: typeof candidate.name === 'string' ? candidate.name.trim() : '',
+            title_vietnamese: typeof candidate.alternateName === 'string' ? candidate.alternateName.trim() : undefined,
+            description: typeof candidate.description === 'string' ? candidate.description.trim() : '',
+            thumbnail_link: typeof image === 'string' ? image.trim() : '',
+            background_link:
+              typeof candidate.backgroundImage === 'string'
+                ? candidate.backgroundImage.trim()
+                : typeof image === 'string'
+                  ? image.trim()
+                  : '',
+            year: typeof candidate.datePublished === 'string'
+              ? Number.parseInt(candidate.datePublished.slice(0, 4), 10)
+              : undefined,
+            actors: actorList
+              .map((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                  return null
+                }
+
+                return typeof entry.name === 'string' ? entry.name.trim() : null
+              })
+              .filter(Boolean),
+            genres: genreList
+              .map((entry) => (typeof entry === 'string' ? entry.trim() : null))
+              .filter(Boolean),
+          }
+        }
+      }
+
+      return null
+    })
+
+    if (jsonLdDetails) {
+      return jsonLdDetails
+    }
+
+    return page.evaluate((detailConfig) => {
+      const text = (selectors) => {
+        for (const selector of selectors) {
+          const element = document.querySelector(selector)
+          if (!(element instanceof HTMLElement)) {
+            continue
+          }
+
+          const value = typeof element.textContent === 'string' ? element.textContent.trim() : ''
+          if (value) {
+            return value
+          }
+        }
+
+        return ''
+      }
+
+      const attr = (selectors, attributeName) => {
+        for (const selector of selectors) {
+          const element = document.querySelector(selector)
+          if (!(element instanceof HTMLElement)) {
+            continue
+          }
+
+          const rawValue = element.getAttribute(attributeName)
+          const value = typeof rawValue === 'string' ? rawValue.trim() : ''
+          if (value) {
+            return value
+          }
+        }
+
+        return ''
+      }
+
+      const title = text(detailConfig.titleSelectors)
+      const description = text(detailConfig.descriptionSelectors)
+      const thumbnailLink = attr(detailConfig.thumbnailSelectors, 'src') || attr(detailConfig.thumbnailSelectors, 'content')
+      const backgroundLink = attr(detailConfig.backgroundSelectors, 'src') || attr(detailConfig.backgroundSelectors, 'content')
+      const yearText = text(detailConfig.yearSelectors)
+
+      return {
+        title_raw: title,
+        description,
+        thumbnail_link: thumbnailLink,
+        background_link: backgroundLink,
+        year: Number.parseInt(yearText, 10),
+      }
+    }, config.detailConfig)
+  }
+}
+
 function defaultMapApiMetadata(payload) {
   const safePayload = payload && typeof payload === 'object' ? payload : {}
   const category = Array.isArray(safePayload.category) ? safePayload.category : []
@@ -163,7 +291,9 @@ export const siteAdapters = {
         return entry && entry.slug ? `/phim/${entry.slug}` : null
       }).filter(Boolean)
     },
-    watchButtonSelector: '.btn-watch,.watch-button,a[href*="xem-phim"]',
+    watchButtonSelector: '.btn-watch,.watch-button,a[href*="xem-phim"],a[href*="/tap-"]',
+    watchRedirectSelectors: ['a[href*="/tap-"]', 'a[href*="xem-phim"]'],
+    watchRedirectTextHints: ['xem phim'],
     linkAttribute: 'href',
     detailConfig: {
       titleSelectors: ['h1', '.movie-title', 'meta[property="og:title"]'],
@@ -176,24 +306,6 @@ export const siteAdapters = {
     detailApi: null,
     mapApiMetadata: defaultMapApiMetadata,
   },
-  'tvhay.best': {
-    key: 'tvhay.best',
-    serverName: 'tvhay.best',
-    listStrategy: 'dom',
-    listItemSelector: 'a.poster, .movie-item a, .film-item a',
-    linkAttribute: 'href',
-    watchButtonSelector: '.btn-watch,.watch-button,a[href*="watch"],a[href*="xem"]',
-    detailConfig: {
-      titleSelectors: ['h1', '.entry-title', 'meta[property="og:title"]'],
-      descriptionSelectors: ['.description', '.entry-content', 'meta[property="og:description"]'],
-      thumbnailSelectors: ['.poster img', '.movie-thumb img', 'meta[property="og:image"]'],
-      backgroundSelectors: ['.backdrop img', '.movie-banner img', 'meta[property="og:image"]'],
-      yearSelectors: ['.year', '.info .year'],
-    },
-    extractDetails: null,
-    detailApi: null,
-    mapApiMetadata: defaultMapApiMetadata,
-  },
 }
 
 for (const adapter of Object.values(siteAdapters)) {
@@ -201,6 +313,8 @@ for (const adapter of Object.values(siteAdapters)) {
     adapter.extractDetails = createDefaultDetailExtractor(adapter.detailConfig)
   }
 }
+
+siteAdapters['motphim.film'].extractDetails = createJsonLdDetailExtractor(siteAdapters['motphim.film'])
 
 export function resolveAdapter(siteKey) {
   const adapter = siteAdapters[siteKey]

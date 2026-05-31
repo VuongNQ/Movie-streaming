@@ -17,6 +17,7 @@ Starter crawler implementation for multi-site movie ingestion with Playwright an
    - set `GOOGLE_APPLICATION_CREDENTIALS` to a service account JSON path
    - or set `FIREBASE_SERVICE_ACCOUNT_PATH` to a service account JSON path
 4. Optional env vars:
+   - `FIREBASE_PROJECT_ID` (or `FIRESTORE_PROJECT_ID`) for explicit project selection
    - `FIRESTORE_DATABASE_ID` defaults to `moviestreaming`
    - `CRAWLER_HEADLESS` defaults to `true`
 
