@@ -11,5 +11,6 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["activeTab", "tabs", "storage", "debugger", "scripting"]
+  "permissions": ["activeTab", "tabs", "storage", "unlimitedStorage", "debugger", "scripting"],
+  "host_permissions": ["https://motphim.film/*"]
 }

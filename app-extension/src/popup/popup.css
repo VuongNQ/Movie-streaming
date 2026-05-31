@@ -189,3 +189,72 @@ button.muted {
   color: #506885;
   background: #fff;
 }
+
+/* --- Movie crawler section --- */
+
+.section-divider {
+  border: none;
+  border-top: 1px solid #dce4ef;
+  margin: 4px 0;
+}
+
+.crawler-section {
+  display: grid;
+  gap: 8px;
+}
+
+.crawler-url-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crawler-url-row label {
+  font-size: 11px;
+  color: #3b4f6a;
+}
+
+.crawler-url-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #b7c3d6;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #13223a;
+  background: #fff;
+  min-width: 0;
+}
+
+.crawler-url-input:focus {
+  outline: 2px solid #4a7fc1;
+  outline-offset: 1px;
+}
+
+.crawl-results-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.crawl-count {
+  flex: 1;
+  font-size: 11px;
+  color: #2b5a20;
+  font-weight: 600;
+  min-width: 0;
+}
+
+button.danger {
+  color: #9f1f1f;
+  border-color: #d6a0a0;
+}
+
+button.danger:hover {
+  border-color: #9f1f1f;
+}
+
+.hidden {
+  display: none !important;
+}

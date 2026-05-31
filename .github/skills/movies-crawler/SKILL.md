@@ -1,6 +1,6 @@
 ---
 name: movies-crawler
-description: 'Generate or update a multi-site movie crawler tool using Node.js and Playwright. Use when building crawler scripts for motphim.film, tvhay.best, or similar sites, collecting movie lists from DOM or API, intercepting m3u8 streams, and writing/updating Firestore movie stream data by domain.'
+description: 'Generate or update a multi-site movie crawler tool using Node.js and Playwright. Use when building crawler scripts for motphim.film (current baseline) and adding new domains, collecting movie lists from DOM or API, intercepting m3u8 streams, and writing/updating Firestore movie stream data by domain.'
 argument-hint: 'Provide target sites, input mode (direct|discovery), and whether to create new crawl code or update an existing crawler'
 user-invocable: true
 ---
@@ -9,7 +9,8 @@ user-invocable: true
 
 ## When to Use
 - Build a new movie crawler script for one or more streaming sites.
-- Add support for a new site adapter such as motphim.film or tvhay.best.
+- Update or harden the existing `motphim.film` adapter.
+- Add support for a new site adapter by following the `motphim.film` pattern.
 - Implement or refactor movie-list discovery from listing pages via DOM or API.
 - Add Playwright-based stream interception for m3u8/HLS links.
 - Update Firestore persistence so existing movies refresh only the current domain stream entry.
@@ -20,6 +21,17 @@ user-invocable: true
 - Expected output: new crawler implementation, adapter update, or refactor.
 - Firestore write expectation: create missing movie docs, update existing movie stream entries, or both.
 - Any known selectors, API endpoints, watch button selectors, or pagination rules.
+
+## Repository Baseline You Must Reuse
+- Start from `movies-crawler/src/adapters.js` and keep adapter logic isolated there.
+- Treat `motphim.film` as the reference implementation:
+  - list API: `https://motphim.film/api/films?page=<n>`
+  - detail URL mapping: `/phim/<slug>`
+  - watch selectors:
+    - `.btn-watch,.watch-button,a[href*="xem-phim"],a[href*="/tap-"]`
+    - redirect selectors: `a[href*="/tap-"]`, `a[href*="xem-phim"]`
+    - redirect hint: `xem phim`
+  - detail extraction: JSON-LD first, then DOM fallback selectors
 
 ## Procedure
 1. Identify the supported domains and define a hostname-based site adapter map.
@@ -62,6 +74,7 @@ user-invocable: true
 - CORS verification distinguishes blocked fetches from ordinary HTTP failures.
 - Firestore writes target the canonical `movies` schema.
 - Existing movies update only the stream entry for the current domain and set `server_name` correctly.
+- `motphim.film` updates preserve current adapter behavior unless a selector/API change is intentionally requested.
 
 ## Output Contract
 When invoked, return:

@@ -1,6 +1,9 @@
 import type {
   CapturedLink,
+  CrawlRuntimeResponse,
+  CrawledMovieEntry,
   DisplayMode,
+  MovieCrawlState,
   PageMetadata,
   RuntimeResponse,
 } from "../types";
@@ -10,6 +13,16 @@ import {
   setCaptureSession,
   setMode,
 } from "../storage/extensionStorage";
+import {
+  clearCrawledMovies,
+  getCrawledMovies,
+  saveCrawledMovies,
+} from "../storage/indexedDbStorage";
+import {
+  buildPageUrl,
+  defaultCrawlState,
+  extractMovieLinksFromPage,
+} from "../crawler/movieListCrawler";
 import { buildTrackingKey } from "../utils/deduplicator";
 import { buildLinkMetadata, detectM3u8 } from "../utils/urlFilter";
 
@@ -17,7 +30,143 @@ type CaptureRequest =
   | { type: "GET_STATE" }
   | { type: "START_CAPTURE" }
   | { type: "STOP_CAPTURE" }
-  | { type: "SET_MODE"; mode: DisplayMode };
+  | { type: "SET_MODE"; mode: DisplayMode }
+  | { type: "START_MOVIE_CRAWL"; searchUrl: string }
+  | { type: "STOP_MOVIE_CRAWL" }
+  | { type: "GET_CRAWL_STATE" }
+  | { type: "GET_CRAWL_RESULTS"; searchUrl?: string }
+  | { type: "CLEAR_CRAWL_RESULTS"; searchUrl?: string };
+
+// --- Movie list crawler state ---
+let crawlState: MovieCrawlState = { ...defaultCrawlState };
+let crawlTabId: number | null = null;
+let crawlShouldStop = false;
+
+async function broadcastCrawlState(state: MovieCrawlState): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({ type: "CRAWL_STATE_UPDATED", crawlState: state });
+  } catch {
+    // Popup may be closed; ignore delivery failures.
+  }
+}
+
+function waitForTabLoad(tabId: number, timeoutMs = 30_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error(`Tab ${tabId} load timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+
+    function listener(
+      updatedTabId: number,
+      changeInfo: { status?: string },
+    ): void {
+      if (updatedTabId === tabId && changeInfo.status === "complete") {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    }
+
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+async function runMovieCrawl(searchUrl: string): Promise<void> {
+  crawlShouldStop = false;
+  crawlState = {
+    status: "running",
+    searchUrl,
+    currentPage: 1,
+    totalFound: 0,
+    error: null,
+  };
+
+  let page = 1;
+
+  try {
+    const tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    crawlTabId = tab.id ?? null;
+
+    if (crawlTabId === null) {
+      throw new Error("Failed to create crawler tab.");
+    }
+
+    while (!crawlShouldStop) {
+      const pageUrl = buildPageUrl(searchUrl, page);
+
+      // For pages beyond the first, do a lightweight HEAD check for 404.
+      if (page > 1) {
+        let is404 = false;
+        try {
+          const res = await fetch(pageUrl, { method: "HEAD" });
+          if (res.status === 404) {
+            is404 = true;
+          }
+        } catch {
+          is404 = true; // network error → treat as end of pages
+        }
+        if (is404) break;
+      }
+
+      // Navigate crawler tab and wait for DOM-complete.
+      await chrome.tabs.update(crawlTabId, { url: pageUrl });
+      await waitForTabLoad(crawlTabId);
+
+      if (crawlShouldStop) break;
+
+      // Extract movie links via scripting injection.
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: crawlTabId },
+        func: extractMovieLinksFromPage,
+      });
+
+      const links: string[] = results[0]?.result ?? [];
+
+      if (links.length === 0) break; // No items on page — end of results.
+
+      const entries: CrawledMovieEntry[] = links.map((link) => ({
+        url: link.startsWith("http") ? link : new URL(link, pageUrl).toString(),
+        crawledAt: new Date().toISOString(),
+        sourceSearchUrl: searchUrl,
+        page,
+      }));
+
+      await saveCrawledMovies(entries);
+
+      crawlState = {
+        ...crawlState,
+        currentPage: page,
+        totalFound: crawlState.totalFound + links.length,
+      };
+
+      await broadcastCrawlState(crawlState);
+      page++;
+    }
+
+    crawlState = {
+      ...crawlState,
+      status: crawlShouldStop ? "stopped" : "done",
+    };
+  } catch (error) {
+    crawlState = {
+      ...crawlState,
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    if (crawlTabId !== null) {
+      try {
+        await chrome.tabs.remove(crawlTabId);
+      } catch {
+        // Tab may already be closed.
+      }
+      crawlTabId = null;
+    }
+  }
+
+  await broadcastCrawlState(crawlState);
+}
 
 const DEBUGGER_VERSION = "1.3";
 let attachedTabId: number | null = null;
@@ -359,6 +508,54 @@ chrome.runtime.onMessage.addListener(
           processedPageParameterUrls.clear();
           const state = await setCaptureSession(false, null);
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
+          return;
+        }
+
+        // --- Movie list crawler messages ---
+
+        if (request.type === "START_MOVIE_CRAWL") {
+          if (crawlState.status === "running") {
+            sendResponse({
+              ok: false,
+              message: "Crawl already running.",
+            } satisfies CrawlRuntimeResponse);
+            return;
+          }
+          const searchUrl = (request as { type: string; searchUrl: string }).searchUrl;
+          if (!searchUrl) {
+            sendResponse({
+              ok: false,
+              message: "searchUrl is required.",
+            } satisfies CrawlRuntimeResponse);
+            return;
+          }
+          void runMovieCrawl(searchUrl);
+          sendResponse({ ok: true, crawlState } satisfies CrawlRuntimeResponse);
+          return;
+        }
+
+        if (request.type === "STOP_MOVIE_CRAWL") {
+          crawlShouldStop = true;
+          sendResponse({ ok: true, crawlState } satisfies CrawlRuntimeResponse);
+          return;
+        }
+
+        if (request.type === "GET_CRAWL_STATE") {
+          sendResponse({ ok: true, crawlState } satisfies CrawlRuntimeResponse);
+          return;
+        }
+
+        if (request.type === "GET_CRAWL_RESULTS") {
+          const searchUrl = (request as { type: string; searchUrl?: string }).searchUrl;
+          const entries = await getCrawledMovies(searchUrl);
+          sendResponse({ ok: true, entries } satisfies CrawlRuntimeResponse);
+          return;
+        }
+
+        if (request.type === "CLEAR_CRAWL_RESULTS") {
+          const searchUrl = (request as { type: string; searchUrl?: string }).searchUrl;
+          await clearCrawledMovies(searchUrl);
+          sendResponse({ ok: true } satisfies CrawlRuntimeResponse);
           return;
         }
 

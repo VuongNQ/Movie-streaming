@@ -1,4 +1,4 @@
-import type { CapturedLink, DisplayMode, ExtensionState, RuntimeResponse } from '../types'
+import type { CapturedLink, CrawlRuntimeResponse, DisplayMode, ExtensionState, MovieCrawlState, RuntimeResponse } from '../types'
 import './popup.css'
 
 function getRequiredElement<T extends Element>(selector: string): T {
@@ -186,12 +186,6 @@ async function copyLink(value: string): Promise<void> {
   }
 }
 
-chrome.runtime.onMessage.addListener((message: { type?: string; state?: ExtensionState }) => {
-  if (message.type === 'STATE_UPDATED' && message.state) {
-    renderState(message.state)
-  }
-})
-
 startButton.addEventListener('click', () => {
   void toggleCapture(true)
 })
@@ -205,6 +199,131 @@ modeSelect.addEventListener('change', () => {
 })
 
 void refreshState()
+
+// --- Movie crawler UI ---
+
+const crawlerUrlInput = getRequiredElement<HTMLInputElement>('#crawlerUrl')
+const startCrawlButton = getRequiredElement<HTMLButtonElement>('#startCrawl')
+const stopCrawlButton = getRequiredElement<HTMLButtonElement>('#stopCrawl')
+const clearCrawlButton = getRequiredElement<HTMLButtonElement>('#clearCrawl')
+const crawlStatusText = getRequiredElement<HTMLParagraphElement>('#crawlStatusText')
+const crawlResultsBar = getRequiredElement<HTMLDivElement>('#crawlResultsBar')
+const crawlResultsCount = getRequiredElement<HTMLSpanElement>('#crawlResultsCount')
+const copyAllUrlsButton = getRequiredElement<HTMLButtonElement>('#copyAllUrls')
+
+async function sendCrawlMessage(
+  request: { type: string; searchUrl?: string },
+): Promise<CrawlRuntimeResponse> {
+  return chrome.runtime.sendMessage(request) as Promise<CrawlRuntimeResponse>
+}
+
+function renderCrawlState(state: MovieCrawlState): void {
+  const { status, currentPage, totalFound, error } = state
+
+  switch (status) {
+    case 'idle':
+      crawlStatusText.textContent = 'Idle'
+      break
+    case 'running':
+      crawlStatusText.textContent = `Crawling page ${currentPage} — ${totalFound} movies found so far…`
+      break
+    case 'done':
+      crawlStatusText.textContent = `Done — ${totalFound} movies collected.`
+      break
+    case 'stopped':
+      crawlStatusText.textContent = `Stopped at page ${currentPage} — ${totalFound} movies saved.`
+      break
+    case 'error':
+      crawlStatusText.textContent = `Error: ${error ?? 'unknown'}`
+      break
+  }
+
+  startCrawlButton.disabled = status === 'running'
+  stopCrawlButton.disabled = status !== 'running'
+
+  if (totalFound > 0) {
+    crawlResultsBar.classList.remove('hidden')
+    crawlResultsCount.textContent = `${totalFound} movie URLs in IndexedDB`
+  } else {
+    crawlResultsBar.classList.add('hidden')
+  }
+}
+
+async function refreshCrawlState(): Promise<void> {
+  const result = await sendCrawlMessage({ type: 'GET_CRAWL_STATE' })
+  if (result.ok && result.crawlState) {
+    renderCrawlState(result.crawlState)
+  }
+}
+
+startCrawlButton.addEventListener('click', () => {
+  const url = crawlerUrlInput.value.trim()
+  if (!url) {
+    setFeedback('Enter a search URL to crawl.', true)
+    return
+  }
+  try {
+    new URL(url) // validate
+  } catch {
+    setFeedback('Invalid URL.', true)
+    return
+  }
+  void sendCrawlMessage({ type: 'START_MOVIE_CRAWL', searchUrl: url }).then((result) => {
+    if (!result.ok) {
+      setFeedback(result.message ?? 'Failed to start crawl.', true)
+      return
+    }
+    if (result.crawlState) renderCrawlState(result.crawlState)
+    setFeedback('Crawl started.')
+  })
+})
+
+stopCrawlButton.addEventListener('click', () => {
+  void sendCrawlMessage({ type: 'STOP_MOVIE_CRAWL' }).then((result) => {
+    if (result.crawlState) renderCrawlState(result.crawlState)
+    setFeedback('Crawl stop requested.')
+  })
+})
+
+clearCrawlButton.addEventListener('click', () => {
+  const url = crawlerUrlInput.value.trim() || undefined
+  void sendCrawlMessage({ type: 'CLEAR_CRAWL_RESULTS', searchUrl: url }).then((result) => {
+    if (!result.ok) {
+      setFeedback(result.message ?? 'Failed to clear results.', true)
+      return
+    }
+    crawlResultsBar.classList.add('hidden')
+    setFeedback('Crawl results cleared.')
+  })
+})
+
+copyAllUrlsButton.addEventListener('click', () => {
+  const url = crawlerUrlInput.value.trim() || undefined
+  void sendCrawlMessage({ type: 'GET_CRAWL_RESULTS', searchUrl: url }).then(async (result) => {
+    if (!result.ok || !result.entries) {
+      setFeedback(result.message ?? 'Failed to retrieve results.', true)
+      return
+    }
+    const json = JSON.stringify(result.entries.map((e) => e.url), null, 2)
+    try {
+      await navigator.clipboard.writeText(json)
+      setFeedback(`Copied ${result.entries.length} URLs as JSON.`)
+    } catch {
+      setFeedback('Unable to copy to clipboard.', true)
+    }
+  })
+})
+
+chrome.runtime.onMessage.addListener((message: { type?: string; state?: ExtensionState; crawlState?: MovieCrawlState }) => {
+  if (message.type === 'STATE_UPDATED' && message.state) {
+    renderState(message.state)
+  }
+  if (message.type === 'CRAWL_STATE_UPDATED' && message.crawlState) {
+    renderCrawlState(message.crawlState)
+  }
+})
+
+void refreshCrawlState()
 
 // Preserve explicit reference for potential debugging hooks without altering behavior.
 void currentState
