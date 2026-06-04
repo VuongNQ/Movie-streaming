@@ -6,6 +6,7 @@ import { DashboardHome } from './pages/DashboardHome'
 import { DevicesPage } from './pages/DevicesPage'
 import { LoginPage } from './pages/LoginPage'
 import { MoviesPage } from './pages/MoviesPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { UsersPage } from './pages/UsersPage'
 
 function AdminOnlyRoute() {
@@ -43,6 +44,7 @@ export default function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/" element={<DashboardHome />} />
           <Route path="/movies" element={<MoviesPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/users" element={<UsersPage />}>
             <Route path=":uid/devices" element={<DevicesPage />} />
           </Route>

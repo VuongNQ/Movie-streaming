@@ -43,3 +43,30 @@ export interface RuntimeResponse {
   state?: ExtensionState
   message?: string
 }
+
+// --- Movie list crawler types ---
+
+export type CrawlStatus = 'idle' | 'running' | 'done' | 'stopped' | 'error'
+
+export interface CrawledMovieEntry {
+  /** Absolute movie page URL — used as IndexedDB primary key */
+  url: string
+  crawledAt: string
+  sourceSearchUrl: string
+  page: number
+}
+
+export interface MovieCrawlState {
+  status: CrawlStatus
+  searchUrl: string | null
+  currentPage: number
+  totalFound: number
+  error: string | null
+}
+
+export interface CrawlRuntimeResponse {
+  ok: boolean
+  crawlState?: MovieCrawlState
+  entries?: CrawledMovieEntry[]
+  message?: string
+}

@@ -31,6 +31,32 @@
         <h2>Detected links</h2>
         <div id="linksContainer" class="links"></div>
       </section>
+
+      <hr class="section-divider" />
+
+      <section class="crawler-section">
+        <h2>Movie List Crawler</h2>
+        <div class="crawler-url-row">
+          <label for="crawlerUrl">Search URL</label>
+          <input
+            id="crawlerUrl"
+            type="url"
+            class="crawler-url-input"
+            placeholder="https://motphim.film/search?type=1&amp;region=5&amp;year=2018"
+            value="https://motphim.film/search?type=1&region=5&year=2018"
+          />
+        </div>
+        <div class="controls">
+          <button id="startCrawl" type="button">Start Crawl</button>
+          <button id="stopCrawl" type="button" class="muted">Stop</button>
+          <button id="clearCrawl" type="button" class="muted danger">Clear</button>
+        </div>
+        <p id="crawlStatusText" class="status">Idle</p>
+        <div id="crawlResultsBar" class="crawl-results-bar hidden">
+          <span id="crawlResultsCount" class="crawl-count"></span>
+          <button id="copyAllUrls" type="button" class="muted">Copy JSON</button>
+        </div>
+      </section>
     </main>
     <script type="module" src="/src/popup/popup.ts"></script>
   </body>

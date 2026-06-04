@@ -1,7 +1,7 @@
 ---
 name: admin-dashboard-crud
-description: 'Generate or update admin-dashboard CRUD features for movies, users, and devices using React Hook Form, React Query, Zustand auth, and Firestore integration. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
-argument-hint: 'Provide entity (movie|user|device), action (create|read|update|delete|full), and target page or route'
+description: 'Generate or update admin-dashboard CRUD features for movies, users, devices, and report log management plus stream preview flows using React Hook Form, React Query, Zustand auth, Firestore integration, and hls.js guidance. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
+argument-hint: 'Provide entity (movie|user|device|report), action (create|read|update|delete|full), and target page or route'
 user-invocable: true
 ---
 
@@ -12,12 +12,14 @@ user-invocable: true
 - Refactor existing forms and tables to align with Firestore data contract.
 - Add role-aware action gating for admin vs user behavior.
 - Add React Query query/mutation hooks and cache invalidation patterns.
+- Implement or improve HLS preview behavior in movie stream connection forms.
 
 ## Required Inputs
-- Entity: movie, user, or device.
+- Entity: movie, user, device, or report.
 - Action scope: create, read, update, delete, or full CRUD.
 - Target path or files in admin-dashboard.
 - Validation and permission requirements.
+- If streams are involved: expected preview behavior and fallback/error handling expectations.
 
 ## Procedure
 1. Map required fields and enums from the project data contract.
@@ -26,8 +28,17 @@ user-invocable: true
 4. Implement Firestore service methods in centralized data layer.
 5. Add React Query hooks and cache invalidation strategy.
 6. Apply role-aware UI and service checks aligned with security policy.
+	- For reports, preserve current admin-dashboard behavior as read-only listing/filter unless explicitly asked to add report actions.
+	- For users, treat dashboard create as Firestore profile creation by UID from existing Auth account unless explicitly asked to change product behavior.
+	- For auth lifecycle actions (disable/reset/delete), use callable Cloud Functions wrappers rather than direct Firestore writes.
 7. Add loading, empty, and permission-denied states.
 8. Add or update tests/checks for critical success and deny paths.
+9. For stream previews, align with hls.js API patterns:
+	- gate on `Hls.isSupported()`;
+	- `attachMedia` + `loadSource` lifecycle;
+	- handle `Hls.Events.ERROR` with `ErrorData` fields;
+	- fatal recovery with bounded `startLoad()`/`recoverMediaError()`;
+	- cleanup with `detachMedia()` and `destroy()`.
 
 ## Quality Checklist
 - Field names match Firestore contract exactly.
@@ -35,6 +46,8 @@ user-invocable: true
 - Required fields are validated before write.
 - Query keys are stable and invalidation is scoped.
 - Permission-denied paths are handled gracefully.
+- HLS preview paths have deterministic cleanup and no infinite retry loops.
+- User create form does not request password when product mode is manual auth provisioning.
 
 ## Output Contract
 When invoked, return:
@@ -47,3 +60,4 @@ When invoked, return:
 - Follow admin-dashboard architecture and component conventions.
 - Follow project data contract and Firestore security role matrix.
 - Prefer additive, backward-compatible changes for schema-impacting updates.
+- For stream preview implementations, follow the official hls.js API docs: https://hlsjs.video-dev.org/api-docs/hls.js.hls

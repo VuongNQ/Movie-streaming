@@ -1,6 +1,6 @@
 ---
 description: "Use when planning or implementing Firestore schema and role-behavior migrations. Defines backward-compatible rollout, dual-read/dual-write strategy, verification, and rollback requirements for Movie-streaming."
-applyTo: "{admin-dashboard/**,android-app-tv/**,extension/**,extensions/**,firebase/**,firestore.rules,firestore.rules.*,README.md,**/*migration*,**/*migrate*}"
+applyTo: "{admin-dashboard/**,android-app-tv/**,app-extension/**,extension/**,extensions/**,firebase/**,firestore.rules,firestore.rules.*,README.md,**/*migration*,**/*migrate*}"
 ---
 
 # Firestore Migration And Compatibility Standards
@@ -51,6 +51,8 @@ Every migration proposal must define:
 - Keep enum value additions non-breaking; never repurpose existing enum semantics.
 - Preserve unknown metadata keys during transforms unless explicitly deprecated.
 - For timestamp transitions, support Firestore Timestamp and ISO boundary conversion during migration window.
+- Preserve movie document id alignment with the stored id field across backfills and rewrites.
+- If admin-dashboard is in scope, account for its current write path that populates created_at on create and last_updated on both create and update.
 
 ## Execution Safety
 - Use dry-run mode where possible before mutating data.
@@ -75,3 +77,4 @@ When a migration changes contracts, update in same PR:
 - project-data-contract instruction;
 - firestore-security instruction if access/policy changed;
 - README or technical notes for new canonical fields.
+- deployment or runbook notes if the target Firestore database id changes from the current moviestreaming setup.

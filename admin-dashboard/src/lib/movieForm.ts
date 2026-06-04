@@ -1,6 +1,28 @@
 import { z } from 'zod'
 import type { Movie, MovieInput } from '../types'
 
+export const movieGenreOptions = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
+  'Music',
+  'Mystery',
+  'Romance',
+  'Science Fiction',
+  'TV Movie',
+  'Thriller',
+  'War',
+  'Western',
+] as const
+
 const movieTypeSchema = z.enum(['single_movie', 'tv_series', 'franchise'])
 const audioTypeSchema = z.enum(['dubbing', 'subtitle'])
 const streamStatusSchema = z.enum(['live', 'dead'])
@@ -51,7 +73,8 @@ function parseJsonObject(value: string) {
 
 export const movieFormSchema = z
   .object({
-    title: z.string().trim().min(1, 'Title is required.'),
+    title_raw: z.string().trim().min(1, 'Raw title is required.'),
+    title_vietnamese: z.string().trim().default(''),
     description: z.string().trim().min(1, 'Description is required.'),
     thumbnail_link: z.url('Thumbnail URL is invalid.'),
     background_link: z.url('Background URL is invalid.'),
@@ -59,8 +82,9 @@ export const movieFormSchema = z
     year: z.coerce.number().int('Year must be an integer.').min(1888, 'Year is invalid.').max(3000, 'Year is invalid.'),
     episode_count: z.coerce.number().int('Episode count must be an integer.').min(1, 'Episode count must be at least 1.'),
     actors_csv: z.string().default(''),
-    genres_csv: z.string().default(''),
+    genres: z.array(z.string().trim().min(1)).default([]),
     audio_types: z.array(audioTypeSchema).default([]),
+    franchise_movie_ids_csv: z.string().trim().default(''),
     youtube_trailer_link: z.string().trim().default(''),
     stream_connections: z.array(streamConnectionFormSchema).default([]),
   })
@@ -86,6 +110,7 @@ export const movieFormSchema = z
         })
       }
     })
+
   })
   .transform((value): MovieInput => {
     const streamConnections = value.stream_connections.map((connection) => {
@@ -108,7 +133,10 @@ export const movieFormSchema = z
     const validStreamConnections = streamConnectionSchema.array().parse(streamConnections)
 
     const payload: MovieInput = {
-      title: value.title,
+      // Keep legacy title mirror during migration.
+      title: value.title_raw,
+      title_raw: value.title_raw,
+      title_vietnamese: value.title_vietnamese,
       description: value.description,
       thumbnail_link: value.thumbnail_link,
       background_link: value.background_link,
@@ -117,9 +145,11 @@ export const movieFormSchema = z
       episode_count: value.episode_count,
       actors: parseCommaList(value.actors_csv),
       audio_types: value.audio_types,
-      genres: parseCommaList(value.genres_csv),
+      genres: value.genres,
       stream_connections: validStreamConnections,
     }
+
+    payload.franchise_movie_ids = value.type === 'franchise' ? parseCommaList(value.franchise_movie_ids_csv) : []
 
     if (value.youtube_trailer_link.length > 0) {
       payload.youtube_trailer_link = value.youtube_trailer_link
@@ -132,7 +162,8 @@ export type MovieFormValues = z.output<typeof movieFormSchema>
 
 export function movieToFormInput(movie: Movie): MovieFormInput {
   return {
-    title: movie.title,
+    title_raw: movie.title_raw,
+    title_vietnamese: movie.title_vietnamese ?? '',
     description: movie.description,
     thumbnail_link: movie.thumbnail_link,
     background_link: movie.background_link,
@@ -140,8 +171,9 @@ export function movieToFormInput(movie: Movie): MovieFormInput {
     year: movie.year,
     episode_count: movie.episode_count,
     actors_csv: movie.actors.join(', '),
-    genres_csv: movie.genres.join(', '),
+    genres: movie.genres,
     audio_types: movie.audio_types,
+    franchise_movie_ids_csv: (movie.franchise_movie_ids ?? []).join(', '),
     youtube_trailer_link: movie.youtube_trailer_link ?? '',
     stream_connections: movie.stream_connections.map((connection) => ({
       server_name: connection.server_name,
@@ -155,7 +187,8 @@ export function movieToFormInput(movie: Movie): MovieFormInput {
 
 export function emptyMovieFormInput(): MovieFormInput {
   return {
-    title: '',
+    title_raw: '',
+    title_vietnamese: '',
     description: '',
     thumbnail_link: '',
     background_link: '',
@@ -163,8 +196,9 @@ export function emptyMovieFormInput(): MovieFormInput {
     year: new Date().getFullYear(),
     episode_count: 1,
     actors_csv: '',
-    genres_csv: '',
+    genres: [],
     audio_types: [],
+    franchise_movie_ids_csv: '',
     youtube_trailer_link: '',
     stream_connections: [],
   }

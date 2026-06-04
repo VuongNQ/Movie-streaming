@@ -19,6 +19,8 @@ Analyze the repository query patterns and produce an actionable index and perfor
 - Flag unbounded scans and read-amplification risks.
 - Propose cost-control improvements and caching opportunities.
 - Suggest updates to firestore.indexes.json.
+- If the current query shapes do not need composite indexes, say so explicitly instead of proposing speculative indexes.
+- Account for the current admin-dashboard query layer: movies ordered by title, users ordered by created_at, devices fetched per user.
 
 ## Expected Output
 1. Table of query patterns mapped to index requirements.
@@ -30,3 +32,4 @@ Analyze the repository query patterns and produce an actionable index and perfor
 - Do not propose offset-based pagination for Firestore.
 - Avoid speculative indexes with no query consumer.
 - Separate must-have indexes from optional optimizations.
+- If firestore.indexes.json is absent, create recommendations for a new file only when a real composite index is required.

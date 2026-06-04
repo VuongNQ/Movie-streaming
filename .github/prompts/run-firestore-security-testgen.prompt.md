@@ -8,7 +8,7 @@ mode: ask
 Use the `firestore-security-testgen` skill with these defaults.
 
 ## Preset Inputs
-- Changed rules/policies: ownership checks in `users/{uid}` and `users/{uid}/devices/{deviceId}`, plus non-admin field protection (`role`, `uid`, `created_at`).
+- Changed rules/policies: movie id alignment in `movies/{movieId}`, ownership checks in `users/{uid}` and `users/{uid}/devices/{deviceId}`, plus non-admin field protection (`role`, `uid`, `created_at`).
 - Target runtime: `vitest`
 - Scope: `all`
 
@@ -18,7 +18,7 @@ Generate or update Firestore Security Rules tests that include:
 - explicit `permission-denied` assertions for blocked operations;
 - cross-user access denial for user and device paths;
 - protected field immutability tests for non-admin;
-- validation checks such as `current_position_seconds >= 0` when enforced.
+- validation checks for constraints actually enforced by the current rules, including movie id alignment and current list-type checks unless the rules change in the same task.
 
 ## Expected Output
 1. Test matrix summary.
@@ -26,3 +26,5 @@ Generate or update Firestore Security Rules tests that include:
 3. Emulator fixture/setup helpers.
 4. Commands to run locally and in CI.
 5. Clear assumptions if any policy detail is ambiguous.
+
+If no rules-test harness exists yet, include the recommended starter layout.
