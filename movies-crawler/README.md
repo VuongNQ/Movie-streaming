@@ -5,6 +5,7 @@ Starter crawler implementation for multi-site movie ingestion with Playwright an
 ## Features
 - direct mode from a local `movies.json` file
 - discovery mode from list pages using DOM selectors or site API adapters
+- domain folder mode where each `.json` filename is the domain (example: `domains/motphim.film.json`)
 - bounded concurrency with `CONCURRENCY_LIMIT = 3`
 - `.m3u8` interception with listener-before-click ordering
 - Firestore upsert flow for `movies`
@@ -31,10 +32,13 @@ Starter crawler implementation for multi-site movie ingestion with Playwright an
 ## Inputs
 - `movies.json`: array of movie URLs for direct mode
 - `pages.json`: array of page/list URLs for discovery mode
+- `domains/*.json`: directory mode where each JSON file is a domain job and filename maps to adapter key
 
 ## Run
 - direct mode: `npm run crawl -- --input-mode=direct --site=motphim.film --input=./movies.json`
 - discovery mode: `npm run crawl -- --input-mode=discovery --site=tvhay.best --input=./pages.json`
+- domain folder mode (all domains in folder): `npm run crawl -- --input-mode=direct --input=./domains`
+- domain folder mode (single domain filter): `npm run crawl -- --input-mode=direct --input=./domains --site=motphim.film`
 
 ## Notes
 - Site selectors and API details are starter placeholders and should be refined per target site.

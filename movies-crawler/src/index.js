@@ -1,7 +1,7 @@
 import './env.js'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import process from 'node:process'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { chromium } from 'playwright'
 import { buildServerName, discoverMovieLinks, resolveAdapter } from './adapters.js'
 import { upsertMovieStream } from './firestore.js'
@@ -31,6 +31,63 @@ async function readJsonArray(filePath) {
   }
 
   return parsed.filter((value) => typeof value === 'string' && value.trim().length > 0).map((value) => value.trim())
+}
+
+async function isDirectory(pathValue) {
+  try {
+    const pathStats = await stat(pathValue)
+    return pathStats.isDirectory()
+  } catch (_error) {
+    return false
+  }
+}
+
+async function resolveInputJobs(inputPath, siteOverride) {
+  const inputIsDirectory = await isDirectory(inputPath)
+  if (!inputIsDirectory) {
+    if (!siteOverride) {
+      throw new Error('Missing required --site=<domain> argument when --input points to a file.')
+    }
+
+    return [{
+      site: siteOverride,
+      sourcePath: inputPath,
+      inputValues: await readJsonArray(inputPath),
+    }]
+  }
+
+  const entries = await readdir(inputPath, { withFileTypes: true })
+  const jsonFiles = entries
+    .filter((entry) => entry.isFile() && extname(entry.name).toLowerCase() === '.json')
+    .map((entry) => ({
+      fileName: entry.name,
+      filePath: join(inputPath, entry.name),
+      domain: basename(entry.name, '.json'),
+    }))
+
+  if (jsonFiles.length === 0) {
+    throw new Error(`No .json input files found in directory: ${inputPath}`)
+  }
+
+  const filteredFiles = siteOverride
+    ? jsonFiles.filter((entry) => entry.domain === siteOverride)
+    : jsonFiles
+
+  if (filteredFiles.length === 0) {
+    throw new Error(`No input file matching domain ${siteOverride} found in ${inputPath}`)
+  }
+
+  const jobs = []
+  for (const fileEntry of filteredFiles) {
+    resolveAdapter(fileEntry.domain)
+    jobs.push({
+      site: fileEntry.domain,
+      sourcePath: fileEntry.filePath,
+      inputValues: await readJsonArray(fileEntry.filePath),
+    })
+  }
+
+  return jobs
 }
 
 function normalizeMetadata(scraped, fallbackTitle) {
@@ -375,29 +432,36 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const site = args.site
   const inputMode = args['input-mode'] ?? 'direct'
-  const inputPath = args.input ?? (inputMode === 'direct' ? './movies.json' : './pages.json')
-
-  if (!site) {
-    throw new Error('Missing required --site=<domain> argument.')
-  }
+  const inputPath = args.input ?? (site ? (inputMode === 'direct' ? './movies.json' : './pages.json') : './domains')
 
   if (inputMode !== 'direct' && inputMode !== 'discovery') {
     throw new Error('input mode must be direct or discovery.')
   }
 
-  const adapter = resolveAdapter(site)
-  const inputValues = await readJsonArray(inputPath)
+  const crawlJobs = await resolveInputJobs(inputPath, site)
   const browser = await chromium.launch({ headless: HEADLESS })
 
   try {
-    const movieUrls = await resolveMovieUrls(browser, adapter, inputMode, inputValues)
-    console.log(`[crawler] Resolved ${movieUrls.length} movie URLs for ${site}`)
+    let totalCompletedTasks = 0
 
-    const results = await runWithConcurrency(movieUrls, CONCURRENCY_LIMIT, (movieUrl) =>
-      crawlMovie(browser, adapter, movieUrl),
-    )
+    for (const job of crawlJobs) {
+      try {
+        const adapter = resolveAdapter(job.site)
+        const movieUrls = await resolveMovieUrls(browser, adapter, inputMode, job.inputValues)
+        console.log(`[crawler] Resolved ${movieUrls.length} movie URLs for ${job.site} (${job.sourcePath})`)
 
-    console.log(`[crawler] Completed ${results.length} crawl tasks.`)
+        const results = await runWithConcurrency(movieUrls, CONCURRENCY_LIMIT, (movieUrl) =>
+          crawlMovie(browser, adapter, movieUrl),
+        )
+
+        totalCompletedTasks += results.length
+        console.log(`[crawler] Completed ${results.length} crawl tasks for ${job.site}.`)
+      } catch (error) {
+        console.error(`[crawler] Domain job failed for ${job.site} (${job.sourcePath}):`, error)
+      }
+    }
+
+    console.log(`[crawler] Finished ${crawlJobs.length} domain job(s) with ${totalCompletedTasks} completed crawl task(s).`)
   } finally {
     await browser.close().catch(() => undefined)
   }
