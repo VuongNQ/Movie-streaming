@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { requireAdmin, requireAuth } from '../middleware/auth.js'
 import { withTransaction } from '../db.js'
+import { generateUUID } from '../utils/uuid.js'
 
 interface SetDisabledRow {
   uid: string
@@ -36,17 +37,23 @@ router.patch('/users/:uid/disabled', async (req, res) => {
   }
 
   const accountStatus = parsed.data.disabled ? 'disabled' : 'active'
-  const { rows } = await withTransaction((client) =>
-    client.query<SetDisabledRow>(
+  const { rows } = await withTransaction(async (client) => {
+    // Update the user
+    await client.query(
       `
         UPDATE users
         SET account_status = $2
         WHERE uid = $1
-        RETURNING uid, account_status
       `,
       [req.params.uid, accountStatus],
-    ),
-  )
+    )
+
+    // Fetch the updated user (works with both PostgreSQL and MySQL)
+    return client.query<SetDisabledRow>(
+      `SELECT uid, account_status FROM users WHERE uid = $1`,
+      [req.params.uid],
+    )
+  })
 
   if (rows.length === 0) {
     res.status(404).json({ message: 'User not found.' })
@@ -63,6 +70,7 @@ router.post('/users/:uid/reset-link', async (req, res) => {
   const rawToken = crypto.randomBytes(32).toString('hex')
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
   const expiresAt = new Date(Date.now() + 1000 * 60 * 30).toISOString()
+  const tokenId = generateUUID()
 
   const { rows } = await withTransaction(async (client) => {
     const userResult = await client.query<UserIdentityRow>(
@@ -76,10 +84,10 @@ router.post('/users/:uid/reset-link', async (req, res) => {
 
     await client.query(
       `
-        INSERT INTO password_reset_tokens (uid, token_hash, expires_at)
-        VALUES ($1, $2, $3)
+        INSERT INTO password_reset_tokens (id, uid, token_hash, expires_at)
+        VALUES ($1, $2, $3, $4)
       `,
-      [req.params.uid, tokenHash, expiresAt],
+      [tokenId, req.params.uid, tokenHash, expiresAt],
     )
 
     return userResult
@@ -104,10 +112,12 @@ router.post('/users/:uid/reset-link', async (req, res) => {
 router.delete('/users/:uid', async (req, res) => {
   const result = await withTransaction(async (client) => {
     const devicesDelete = await client.query('DELETE FROM devices WHERE uid = $1', [req.params.uid])
-    const userDelete = await client.query<DeletedUserRow>('DELETE FROM users WHERE uid = $1 RETURNING uid', [req.params.uid])
+    const tokenDelete = await client.query('DELETE FROM password_reset_tokens WHERE uid = $1', [req.params.uid])
+    const userDelete = await client.query<DeletedUserRow>('DELETE FROM users WHERE uid = $1', [req.params.uid])
 
     return {
       deletedDevicesCount: devicesDelete.rowCount ?? 0,
+      deletedTokensCount: tokenDelete.rowCount ?? 0,
       deletedUser: userDelete.rows[0] ?? null,
     }
   })
@@ -121,6 +131,7 @@ router.delete('/users/:uid', async (req, res) => {
     uid: req.params.uid,
     deleted_profile: true,
     deleted_devices_count: result.deletedDevicesCount,
+    deleted_tokens_count: result.deletedTokensCount,
   })
 })
 
