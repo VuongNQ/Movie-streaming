@@ -6,6 +6,7 @@ async function main(): Promise<void> {
   await import('../routes/authRoutes.js')
   await import('../routes/adminRoutes.js')
   await import('../migrations/runMigrations.js')
+  await import('../utils/uuid.js')
 
   console.log('sql-api module validation passed.')
 }

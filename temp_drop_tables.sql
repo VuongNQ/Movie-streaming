@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS schema_migrations;
+DROP TABLE IF EXISTS password_reset_tokens;
+DROP TABLE IF EXISTS reports;
+DROP TABLE IF EXISTS devices;
+DROP TABLE IF EXISTS movies;
+DROP TABLE IF EXISTS users;
