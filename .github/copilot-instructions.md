@@ -76,3 +76,16 @@ cd android-app-tv
   - `.github/instructions/project-data-contract.instructions.md`
   - `.github/instructions/firestore-security.instructions.md`
   - `.github/instructions/firestore-rules-testing.instructions.md` (if rules/auth behavior changes)
+
+## Android TV customization routing
+
+- For Android TV UI-only improvements (focus behavior, remote navigation, readability, states), use:
+  - Agent: `.github/agents/android-tv-ui.agent.md`
+  - Prompt: `.github/prompts/implement-android-tv-ui.prompt.md`
+  - Instruction: `.github/instructions/android-tv-ui-patterns.instructions.md`
+- For Leanback to Compose migration work, use:
+  - Agent: `.github/agents/android-tv-compose-migration.agent.md`
+  - Prompt: `.github/prompts/migrate-android-tv-compose.prompt.md`
+  - Skill: `.github/skills/android-tv-compose-migration/SKILL.md`
+- Continue using `.github/skills/android-tv-firestore/SKILL.md` for Firestore mapping/repository-focused Android TV tasks.
+- Keep both Android TV lanes aligned with `.github/instructions/android-tv-compose.instructions.md`, `.github/instructions/project-data-contract.instructions.md`, and `.github/instructions/firestore-security.instructions.md`.
