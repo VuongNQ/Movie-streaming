@@ -9,6 +9,7 @@ Admin Dashboard for Movie-streaming built with React + TypeScript + Vite.
 - React Query
 - Zustand (auth/session state)
 - Firebase Auth + Firestore
+- Google OAuth popup login for admin sign-in
 - React Hook Form + Zod
 
 ## Setup
@@ -27,6 +28,7 @@ cp .env.example .env.local
 
 3. Fill Firebase values in .env.local.
 	Set `VITE_FIREBASE_DATABASE_ID=moviestreaming` to use the named Firestore database.
+	Enable Google provider in Firebase Authentication and add localhost/staging/prod to Authorized domains.
 
 4. Start dev server:
 

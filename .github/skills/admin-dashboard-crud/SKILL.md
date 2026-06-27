@@ -1,6 +1,6 @@
 ---
 name: admin-dashboard-crud
-description: 'Generate or update admin-dashboard CRUD features for movies, users, devices, and report log management plus stream preview flows using React Hook Form, React Query, Zustand auth, Firestore integration, and hls.js guidance. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
+description: 'Generate or update admin-dashboard CRUD features for movies, users, devices, and report log management plus stream preview flows using React Hook Form, React Query, Zustand auth (Google OAuth login + role checks), Firestore integration, and hls.js guidance. Use for new manager pages, edit forms, list filters, and mutation flows with role-aware behavior.'
 argument-hint: 'Provide entity (movie|user|device|report), action (create|read|update|delete|full), and target page or route'
 user-invocable: true
 ---
@@ -30,6 +30,7 @@ user-invocable: true
 6. Apply role-aware UI and service checks aligned with security policy.
 	- For reports, preserve current admin-dashboard behavior as read-only listing/filter unless explicitly asked to add report actions.
 	- For users, treat dashboard create as Firestore profile creation by UID from existing Auth account unless explicitly asked to change product behavior.
+	- Keep admin login assumptions aligned with product mode: Google OAuth popup sign-in; no email/password login form in dashboard.
 	- For auth lifecycle actions (disable/reset/delete), use callable Cloud Functions wrappers rather than direct Firestore writes.
 7. Add loading, empty, and permission-denied states.
 8. Add or update tests/checks for critical success and deny paths.
@@ -47,7 +48,8 @@ user-invocable: true
 - Query keys are stable and invalidation is scoped.
 - Permission-denied paths are handled gracefully.
 - HLS preview paths have deterministic cleanup and no infinite retry loops.
-- User create form does not request password when product mode is manual auth provisioning.
+- User create form does not request password.
+- Login-related changes preserve Google OAuth popup entry and Firestore role-based admin gate.
 
 ## Output Contract
 When invoked, return:

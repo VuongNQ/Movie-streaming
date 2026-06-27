@@ -1,20 +1,9 @@
-import { useEffect } from 'react'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { FirebaseError } from 'firebase/app'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { z } from 'zod'
 import { useAuthStore } from '../lib/store'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Input } from '../components/ui/input'
-import { Label } from '../components/ui/label'
-
-const loginSchema = z.object({
-  email: z.email(),
-  password: z.string().min(6),
-})
-
-type LoginInput = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const login = useAuthStore((state) => state.login)
@@ -22,16 +11,7 @@ export function LoginPage() {
   const user = useAuthStore((state) => state.user)
   const initialized = useAuthStore((state) => state.initialized)
   const navigate = useNavigate()
-
-  const {
-    register,
-    handleSubmit,
-    setError,
-    formState: { errors },
-  } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  })
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   useEffect(() => {
     if (initialized && user) {
@@ -43,11 +23,30 @@ export function LoginPage() {
     return <Navigate to="/" replace />
   }
 
-  async function onSubmit(values: LoginInput) {
+  async function onSignInWithGoogle() {
+    setLoginError(null)
+
     try {
-      await login(values.email, values.password)
-    } catch {
-      setError('root', { message: 'Invalid email or password.' })
+      await login()
+    } catch (error) {
+      if (error instanceof FirebaseError) {
+        if (error.code === 'auth/popup-closed-by-user') {
+          setLoginError('Google sign-in was canceled before completion.')
+          return
+        }
+
+        if (error.code === 'auth/popup-blocked') {
+          setLoginError('Popup was blocked by your browser. Please allow popups and try again.')
+          return
+        }
+
+        if (error.code === 'auth/unauthorized-domain') {
+          setLoginError('This domain is not authorized for Google sign-in in Firebase Auth.')
+          return
+        }
+      }
+
+      setLoginError('Google sign-in failed. Please try again.')
     }
   }
 
@@ -56,29 +55,17 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">Admin Login</CardTitle>
-          <CardDescription>Sign in to manage movies, users, and devices.</CardDescription>
+          <CardDescription>Sign in with Google to manage movies, users, and devices.</CardDescription>
         </CardHeader>
 
         <CardContent>
-          <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="admin@movie-streaming.com" {...register('email')} />
-              {errors.email ? <small className="text-xs text-red-600">{errors.email.message}</small> : null}
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" {...register('password')} />
-              {errors.password ? <small className="text-xs text-red-600">{errors.password.message}</small> : null}
-            </div>
-
-            {errors.root ? <small className="text-xs text-red-600">{errors.root.message}</small> : null}
-
-            <Button type="submit" disabled={loading} className="mt-2 w-full">
-              {loading ? 'Signing in...' : 'Sign in'}
+          <div className="grid gap-4">
+            <Button type="button" disabled={loading} className="mt-2 w-full" onClick={onSignInWithGoogle}>
+              {loading ? 'Signing in...' : 'Continue with Google'}
             </Button>
-          </form>
+
+            {loginError ? <small className="text-xs text-red-600">{loginError}</small> : null}
+          </div>
         </CardContent>
       </Card>
     </div>

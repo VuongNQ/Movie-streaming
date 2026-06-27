@@ -25,7 +25,9 @@ Use this file when implementing or refactoring admin-dashboard code. Keep archit
 - Reports management UI is currently read-only in admin-dashboard (filters + listing only, no report action/status mutation controls).
 
 ## User Auth Lifecycle Rules
-- User creation in admin-dashboard is Firestore profile creation only and requires UID from a manually provisioned Firebase Auth account.
+- Admin dashboard sign-in uses Google OAuth popup (`signInWithPopup`) and does not use email/password login.
+- Admin access is granted by Firestore role only (`users/{uid}.role = admin`) after the user has an Auth UID.
+- User creation in admin-dashboard is Firestore profile creation only and requires UID from an existing Firebase Auth account.
 - Do not collect or persist password values in the dashboard for user creation.
 - Auth lifecycle actions in dashboard must call Cloud Functions through `httpsCallable` wrappers (disable/enable, password reset link, delete).
 - Avoid raw browser `fetch` calls directly to callable endpoint URLs.

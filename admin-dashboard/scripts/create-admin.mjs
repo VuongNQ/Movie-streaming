@@ -78,14 +78,21 @@ function printHelp() {
   console.log(`\nCreate or promote an admin account for Movie-streaming.\n
 Usage:
   npm run create-admin -- --email <email> --password <password> --username <username> [options]
+  npm run create-admin -- --profile-only --uid <uid> --username <username> [options]
 
 Required:
+  --username <username>    Username stored in users/{uid}
+
+Required unless --profile-only:
   --email <email>          Login email for Firebase Auth user
   --password <password>    Password for Firebase Auth user
-  --username <username>    Username stored in users/{uid}
+
+Required with --profile-only:
+  --uid <uid>              Existing Auth UID (from first Google sign-in)
 
 Options:
   --uid <uid>                              Use custom UID when creating a new auth user
+  --profile-only                           Skip Auth create/update and only upsert users/{uid}
   --project-id <projectId>                 Firebase project id for Admin SDK
   --database-id <databaseId>               Firestore database id (default: moviestreaming)
   --service-account <path-to-json>         Service account JSON file path
@@ -101,7 +108,11 @@ Environment defaults from .env:
 
 Auth for admin script:
   1) Preferred: --service-account <path>
-  2) Or set GOOGLE_APPLICATION_CREDENTIALS to a service account file\n`)
+  2) Or set GOOGLE_APPLICATION_CREDENTIALS to a service account file
+
+Notes:
+  - Admin dashboard login is Google OAuth popup.
+  - Use --profile-only after a user signs in with Google for the first time.\n`)
 }
 
 function assertRequired(args, key) {
@@ -223,9 +234,16 @@ async function main() {
     return
   }
 
-  assertRequired(args, 'email')
-  assertRequired(args, 'password')
+  const profileOnly = args['profile-only'] === true
+
   assertRequired(args, 'username')
+
+  if (profileOnly) {
+    assertRequired(args, 'uid')
+  } else {
+    assertRequired(args, 'email')
+    assertRequired(args, 'password')
+  }
 
   const projectId =
     (args['project-id'] && args['project-id'] !== true && args['project-id']) ||
@@ -251,15 +269,23 @@ async function main() {
     credential: resolveCredentials(args),
   })
 
-  const auth = getAuth(app)
   const db = getFirestore(app, databaseId)
 
-  const authResult = await ensureAuthUser(auth, args)
-  const docResult = await upsertAdminDoc(db, authResult.uid, args.username)
+  let uid = args.uid
+  let authStatus = 'skipped (profile-only mode)'
+
+  if (!profileOnly) {
+    const auth = getAuth(app)
+    const authResult = await ensureAuthUser(auth, args)
+    uid = authResult.uid
+    authStatus = authResult.created ? 'created' : 'updated existing user'
+  }
+
+  const docResult = await upsertAdminDoc(db, uid, args.username)
 
   console.log('\nAdmin account ready:')
-  console.log(`- uid: ${authResult.uid}`)
-  console.log(`- auth: ${authResult.created ? 'created' : 'updated existing user'}`)
+  console.log(`- uid: ${uid}`)
+  console.log(`- auth: ${authStatus}`)
   console.log(`- users/{uid}: ${docResult}`)
 }
 

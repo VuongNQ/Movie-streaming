@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
+import { GoogleAuthProvider, getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 
@@ -18,6 +18,10 @@ const functionsRegion = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-ce
 const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
+export const googleAuthProvider = new GoogleAuthProvider()
+googleAuthProvider.setCustomParameters({
+  prompt: 'select_account',
+})
 export const db = getFirestore(app, firestoreDatabaseId)
 export const functionsClient = getFunctions(app, functionsRegion)
 

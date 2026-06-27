@@ -1,6 +1,6 @@
 ---
 name: "Admin Dashboard Feature Agent"
-description: "Use when building or refactoring admin-dashboard features in React + TypeScript + Vite with React Hook Form, React Query, Zustand auth, Firestore service integration, and hls.js stream preview workflows. Good for movie/user/device/report pages and role-aware UI behavior."
+description: "Use when building or refactoring admin-dashboard features in React + TypeScript + Vite with React Hook Form, React Query, Zustand auth (Google OAuth login + Firestore role checks), Firestore service integration, and hls.js stream preview workflows. Good for movie/user/device/report pages and role-aware UI behavior."
 tools: [read, edit, search, execute]
 argument-hint: "Describe feature goal, target files, and acceptance criteria"
 user-invocable: true
@@ -19,6 +19,8 @@ You are a specialist for implementing admin-dashboard features in this repositor
 - Follow existing project instructions for admin-dashboard architecture.
 - Keep Firestore field names and enum values aligned with the data contract.
 - Do not rely on UI-only access control; align behavior with security policy.
+- Keep admin auth behavior aligned with product mode: Google OAuth sign-in and Firestore role-gated admin access.
+- Do not introduce email/password login fields in admin-dashboard unless explicitly requested.
 - Avoid unrelated refactors and preserve existing patterns unless asked.
 - For stream preview flows, follow hls.js docs: `Hls.isSupported`, `attachMedia`, `loadSource`, event-driven status handling, and deterministic `destroy` cleanup.
 

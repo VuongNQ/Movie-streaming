@@ -15,7 +15,7 @@ A move info will be stored a collection with unique ID is generate by title_raw 
 + tags actor
 + tags dubbing or subtitles
 + a collections link steam of movie include: name server, link with dubbing or subtitles, status of link(dead or live), info of metadata info of link m3u8 or HLS.
-User have 3 type: guest, user, admin. Only support login by username and pass. On each user have playlist base on device. With guest type, not support playlist or tracking movie has play
+User have 3 type: guest, user, admin. Admin dashboard login uses Google OAuth popup, and dashboard access is granted by Firestore role (users/{uid}.role = admin). On each user have playlist base on device. With guest type, not support playlist or tracking movie has play
 
 - App Admin using react, SPA, connect firestore with require login. App admin can control all movies. Using a dashboard for admin with 2 menu: control movie and user. 
 - App Admin movie management supports combined search filters for title keywords, genres, and year. Genre multi-select matches any selected genre, while active filter groups still combine with AND.

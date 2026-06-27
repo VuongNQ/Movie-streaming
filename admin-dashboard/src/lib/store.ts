@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import type { Unsubscribe } from 'firebase/auth'
-import { auth, db } from './firebase'
+import { auth, db, googleAuthProvider } from './firebase'
 import type { UserRole } from '../types'
 
 interface AuthUser {
@@ -17,7 +17,7 @@ interface AuthState {
   initialized: boolean
   hasUnsavedMovieChanges: boolean
   init: () => Unsubscribe
-  login: (email: string, password: string) => Promise<void>
+  login: () => Promise<void>
   logout: () => Promise<void>
   setHasUnsavedMovieChanges: (value: boolean) => void
 }
@@ -64,10 +64,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       })
     }),
 
-  login: async (email, password) => {
+  login: async () => {
     set({ loading: true })
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      await signInWithPopup(auth, googleAuthProvider)
     } catch (error) {
       set({ loading: false })
       throw error

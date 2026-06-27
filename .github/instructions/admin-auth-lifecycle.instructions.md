@@ -1,5 +1,5 @@
 ---
-description: "Use when changing admin user auth lifecycle behavior across dashboard and Cloud Functions. Defines manual Firebase Auth provisioning + UID profile create flow, callable endpoint boundaries, and verification expectations."
+description: "Use when changing admin user auth lifecycle behavior across dashboard and Cloud Functions. Defines Google OAuth sign-in, Firestore role-based admin access, callable endpoint boundaries, and verification expectations."
 applyTo: "{admin-dashboard/**,functions/**,firebase/**,firebase.json,README.md}"
 ---
 
@@ -9,7 +9,9 @@ applyTo: "{admin-dashboard/**,functions/**,firebase/**,firebase.json,README.md}"
 Keep admin user-management behavior aligned between dashboard UI, Firestore profile data, and Cloud Functions auth lifecycle endpoints.
 
 ## Current Product Decision
-- Firebase Auth accounts are provisioned manually in Firebase Authentication.
+- Admin dashboard sign-in uses Google OAuth popup flow on Firebase Auth.
+- Email/password login is not supported in admin-dashboard login UI.
+- First login creates/uses Firebase Auth identity; admin access is granted only by Firestore role (`users/{uid}.role = admin`).
 - Admin dashboard user create form writes Firestore profile only and requires UID from existing Auth account.
 - Dashboard must not collect or store password for user creation.
 
@@ -47,6 +49,8 @@ Keep admin user-management behavior aligned between dashboard UI, Firestore prof
 - admin-dashboard typecheck and lint pass.
 - Emulator smoke path validates disable/reset/delete callable flow.
 - Manual UI check confirms:
+  - Google sign-in succeeds for valid account on authorized domain
+  - authenticated non-admin user is denied dashboard access
   - create profile with manual UID
   - disable/enable toggles account status
   - reset password returns usable reset link
