@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Movie  app TV</string>
+    <string name="app_name">Movie TV</string>
     <string name="browse_title">Videos by Your Company</string>
     <string name="related_movies">Related Videos</string>
     <string name="grid_view">Grid View</string>
@@ -7,11 +7,79 @@
     <string name="personal_settings">Personal Settings</string>
     <string name="watch_trailer_1">Watch trailer</string>
     <string name="watch_trailer_2">FREE</string>
-    <string name="rent_1">Rent By Day</string>
+    <string name="rent_1">Rent by day</string>
     <string name="rent_2">From $1.99</string>
-    <string name="buy_1">Buy and Own</string>
+    <string name="buy_1">Buy and own</string>
     <string name="buy_2">AT $9.99</string>
     <string name="movie">Movie</string>
+    <string name="rent_hd_price">Watch movie</string>
+    <string name="details_meta_line">● 78%%    1h 46m    2025</string>
+
+    <string name="preferences_header">PREFERENCES</string>
+    <string name="search_not_implemented">Implement your own in-app search</string>
+
+    <string name="home_loading_movies">Loading movies...</string>
+    <string name="home_retry">Retry</string>
+    <string name="home_no_movies">No movies available</string>
+    <string name="home_title">Movie Streaming</string>
+    <string name="home_all_movies">All Movies</string>
+    <string name="home_watched_movies">Watched Movies</string>
+    <string name="home_unwatched_movies">Unwatched Movies</string>
+    <string name="home_continue_watching">Continue Watching</string>
+    <string name="home_filter_all">All</string>
+    <string name="home_filter_watched">Watched</string>
+    <string name="home_filter_unwatched">Unwatched</string>
+    <string name="home_filter_hint">Use remote to select a filter</string>
+    <string name="home_filter_active_all">Active filter: All</string>
+    <string name="home_filter_active_watched">Active filter: Watched</string>
+    <string name="home_filter_active_unwatched">Active filter: Unwatched</string>
+    <string name="home_filter_empty">No movies match this filter</string>
+    <string name="switch_to_english">English</string>
+    <string name="switch_to_vietnamese">Tiếng Việt</string>
+
+    <string name="details_loading">Loading details...</string>
+    <string name="details_movie_unavailable">Movie unavailable</string>
+    <string name="details_live">Live</string>
+    <string name="details_unavailable">Unavailable</string>
+    <string name="details_episode_count">%1$d ep</string>
+    <string name="details_more">More</string>
+    <string name="details_unknown_state">Unknown state</string>
+
+    <string name="player_loading">Loading player...</string>
+    <string name="player_no_live_stream">No live stream available</string>
+    <string name="player_unknown_state">Unknown player state</string>
+
+    <string name="error_movie_not_found">Movie not found</string>
+    <string name="error_load_movies">Failed to load movies</string>
+    <string name="error_load_movie_details">Failed to load movie details</string>
+    <string name="error_load_movie">Failed to load movie</string>
+
+    <string name="sample_movie_description">Sample movie description used to validate Android TV layouts and metadata presentation during development.</string>
+
+    <string-array name="sample_movie_categories">
+        <item>Category 0</item>
+        <item>Category 1</item>
+        <item>Category 2</item>
+        <item>Category 3</item>
+        <item>Category 4</item>
+        <item>Category 5</item>
+    </string-array>
+
+    <string-array name="sample_movie_titles">
+        <item>Zeitgeist 2010_ Year in Review</item>
+        <item>Google Demo Slam_ 20ft Search</item>
+        <item>Introducing Gmail Blue</item>
+        <item>Introducing Google Fiber to the Pole</item>
+        <item>Introducing Google Nose</item>
+    </string-array>
+
+    <string-array name="sample_movie_studios">
+        <item>Studio 0</item>
+        <item>Studio 1</item>
+        <item>Studio 2</item>
+        <item>Studio 3</item>
+        <item>Studio 4</item>
+    </string-array>
 
     <!-- Error messages -->
     <string name="error_fragment_message">An error occurred</string>

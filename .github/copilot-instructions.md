@@ -34,7 +34,7 @@ cd android-app-tv
 ## High-level architecture
 
 - Product architecture in README is a **3-component system**:
-  - `android-app-tv`: TV playback app (Kotlin/Leanback), consumer-facing playback.
+  - `android-app-tv`: TV playback app (Kotlin/Compose + Navigation), consumer-facing playback.
   - `admin-dashboard`: React SPA for admin movie/user control.
   - `extension`/`extensions` (when present): Chromium extension (vanilla JS) to capture stream links and send/update data for admin workflows.
 - Current repository code is active in `admin-dashboard` and `android-app-tv`; data contract and security instructions already cover extension flows and should be followed when extension code is added/updated.
@@ -52,7 +52,12 @@ cd android-app-tv
   - `lib/firestore.ts` is the Firestore service layer for CRUD/query calls.
   - `lib/queries.ts` wraps service calls with React Query hooks.
   - `pages/*` consume hooks and render management UIs (movies, users, nested devices).
-- Android app currently uses Leanback sample-style browsing/playback (`MainFragment` -> `DetailsActivity`/`VideoDetailsFragment` -> `PlaybackActivity`/`PlaybackVideoFragment`) and local `MovieList` data, while Firestore dependency is present for future/ongoing integration.
+- Android app runtime is Compose-first:
+  - `MainActivity` mounts `TvAppRoot` and `navigation/TvNavGraph`.
+  - Feature screens live under `feature/home`, `feature/details`, and `feature/player`.
+  - Firestore movie reads are served by `data/repository/FirestoreMovieRepository`.
+  - Local device tracking is served by `data/repository/LocalTrackingRepository`.
+  - Home supports local watched/unwatched filtering (`ALL`, `WATCHED`, `UNWATCHED`) and continues to show Continue Watching.
 
 ## Key conventions specific to this repo
 
@@ -83,9 +88,9 @@ cd android-app-tv
   - Agent: `.github/agents/android-tv-ui.agent.md`
   - Prompt: `.github/prompts/implement-android-tv-ui.prompt.md`
   - Instruction: `.github/instructions/android-tv-ui-patterns.instructions.md`
-- For Leanback to Compose migration work, use:
+- For remaining legacy Leanback cleanup or migration hardening, use:
   - Agent: `.github/agents/android-tv-compose-migration.agent.md`
   - Prompt: `.github/prompts/migrate-android-tv-compose.prompt.md`
   - Skill: `.github/skills/android-tv-compose-migration/SKILL.md`
-- Continue using `.github/skills/android-tv-firestore/SKILL.md` for Firestore mapping/repository-focused Android TV tasks.
-- Keep both Android TV lanes aligned with `.github/instructions/android-tv-compose.instructions.md`, `.github/instructions/project-data-contract.instructions.md`, and `.github/instructions/firestore-security.instructions.md`.
+- Continue using `.github/skills/android-tv-firestore/SKILL.md` for Firestore mapping/repository-focused Android TV tasks in the Compose feature stack.
+- Keep Android TV work aligned with `.github/instructions/android-tv-compose.instructions.md`, `.github/instructions/project-data-contract.instructions.md`, and `.github/instructions/firestore-security.instructions.md`.

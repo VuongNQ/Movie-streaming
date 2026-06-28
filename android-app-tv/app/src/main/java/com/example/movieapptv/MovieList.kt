@@ -1,42 +1,22 @@
 package com.example.movieapptv
 
-object MovieList {
-    val MOVIE_CATEGORY = arrayOf(
-        "Category Zero",
-        "Category One",
-        "Category Two",
-        "Category Three",
-        "Category Four",
-        "Category Five"
-    )
+import android.content.res.Resources
 
-    val list: List<Movie> by lazy {
-        setupMovies()
+object MovieList {
+    fun categories(resources: Resources): Array<String> =
+        resources.getStringArray(R.array.sample_movie_categories)
+
+    fun list(resources: Resources): List<Movie> {
+        count = 0
+        return setupMovies(resources)
     }
+
     private var count: Long = 0
 
-    private fun setupMovies(): List<Movie> {
-        val title = arrayOf(
-            "Zeitgeist 2010_ Year in Review",
-            "Google Demo Slam_ 20ft Search",
-            "Introducing Gmail Blue",
-            "Introducing Google Fiber to the Pole",
-            "Introducing Google Nose"
-        )
-
-        val description = "Fusce id nisi turpis. Praesent viverra bibendum semper. " +
-                "Donec tristique, orci sed semper lacinia, quam erat rhoncus massa, non congue tellus est " +
-                "quis tellus. Sed mollis orci venenatis quam scelerisque accumsan. Curabitur a massa sit " +
-                "amet mi accumsan mollis sed et magna. Vivamus sed aliquam risus. Nulla eget dolor in elit " +
-                "facilisis mattis. Ut aliquet luctus lacus. Phasellus nec commodo erat. Praesent tempus id " +
-                "lectus ac scelerisque. Maecenas pretium cursus lectus id volutpat."
-        val studio = arrayOf(
-            "Studio Zero",
-            "Studio One",
-            "Studio Two",
-            "Studio Three",
-            "Studio Four"
-        )
+    private fun setupMovies(resources: Resources): List<Movie> {
+        val title = resources.getStringArray(R.array.sample_movie_titles)
+        val description = resources.getString(R.string.sample_movie_description)
+        val studio = resources.getStringArray(R.array.sample_movie_studios)
         val videoUrl = arrayOf(
             "https://commondatastorage.googleapis.com/android-tv/Sample%20videos/Zeitgeist/Zeitgeist%202010_%20Year%20in%20Review.mp4",
             "https://commondatastorage.googleapis.com/android-tv/Sample%20videos/Demo%20Slam/Google%20Demo%20Slam_%2020ft%20Search.mp4",
@@ -59,7 +39,15 @@ object MovieList {
             "https://commondatastorage.googleapis.com/android-tv/Sample%20videos/April%20Fool's%202013/Introducing%20Google%20Nose/card.jpg"
         )
 
-        val list = title.indices.map {
+        val itemCount = minOf(
+            title.size,
+            studio.size,
+            videoUrl.size,
+            bgImageUrl.size,
+            cardImageUrl.size,
+        )
+
+        val list = (0 until itemCount).map {
             buildMovieInfo(
                 title[it],
                 description,

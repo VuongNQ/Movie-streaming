@@ -1,18 +1,18 @@
 ---
-description: "Use when building or refactoring android-app-tv toward a Jetpack Compose for TV architecture. Defines package structure, feature boundaries, navigation, and migration mapping from current Leanback fragments."
+description: "Use when building or refactoring android-app-tv in its Jetpack Compose for TV architecture. Defines package structure, feature boundaries, navigation, and legacy Leanback cleanup guidance."
 applyTo: "android-app-tv/**"
 ---
 
 # Android TV Compose Structure Instructions
 
 ## Purpose
-Use this instruction when implementing new Android TV features or migrating existing Leanback screens to **Jetpack Compose for TV**.
+Use this instruction when implementing new Android TV features in the existing **Compose-first TV app** or when cleaning up remaining Leanback artifacts.
 
-Base this structure on the current `android-app-tv/app` module, which is currently activity + fragment + Leanback based:
-- `MainActivity` + `MainFragment` (browse/home)
-- `DetailsActivity` + `VideoDetailsFragment` (details)
-- `PlaybackActivity` + `PlaybackVideoFragment` (player)
-- `Movie` + `MovieList` (domain sample data)
+Current active app flow in `android-app-tv/app`:
+- `MainActivity` -> `app/TvAppRoot.kt` -> `navigation/TvNavGraph.kt`
+- `feature/home/HomeScreen.kt`, `feature/details/DetailsScreen.kt`, `feature/player/PlayerScreen.kt`
+- Firestore-backed movies via `data/repository/FirestoreMovieRepository.kt`
+- Local tracking/watched state via `data/repository/LocalTrackingRepository.kt`
 
 ## Target Module And Package Layout
 Keep a single `:app` module unless there is a clear need for modularization.
@@ -41,7 +41,7 @@ navigation/             # Nav graph routes and typed arguments
 
 ## Compose-First UI Rules
 - Prefer Compose for all new UI in `feature/*`.
-- Use TV-focused Compose APIs (`androidx.tv.material3`, `androidx.tv.foundation`) for focus, scaling, and D-pad behavior.
+- Use Compose APIs already present in the app (`material3`, `navigation-compose`, `lifecycle-compose`) and keep focus/D-pad behavior explicit.
 - Keep one activity entry point (`MainActivity`) with `setContent { ... }`; avoid new fragment-based screens.
 - Use Compose Navigation for screen flow: home -> details -> player.
 - Keep screen state in `ViewModel`; composables should be mostly stateless and parameter-driven.
@@ -53,12 +53,17 @@ navigation/             # Nav graph routes and typed arguments
   `feature ViewModel -> domain use case -> repository -> data source`.
 - Preserve snake_case Firestore field names at data boundary and map to Kotlin domain models explicitly.
 
-## Suggested File Mapping From Current App
-- `MainFragment` -> `feature/home/HomeScreen.kt` + `HomeViewModel.kt`
-- `VideoDetailsFragment` -> `feature/details/DetailsScreen.kt` + `DetailsViewModel.kt`
-- `PlaybackVideoFragment` -> `feature/player/PlayerScreen.kt` + `PlayerViewModel.kt`
-- `Movie.kt` -> split into `data/model` and `domain/model` models with mapper functions
-- `MovieList.kt` -> temporary fake repository in `data/repository/FakeMovieRepository.kt` (for staged migration only)
+## Feature And Data Mapping
+- Home: `feature/home/HomeScreen.kt` + `HomeViewModel.kt`.
+- Details: `feature/details/DetailsScreen.kt` + `DetailsViewModel.kt`.
+- Player: `feature/player/PlayerScreen.kt` + `PlayerViewModel.kt`.
+- Domain models: `domain/model/Movie.kt`.
+- Repositories:
+  - `domain/repository/MovieRepository.kt` -> `data/repository/FirestoreMovieRepository.kt`
+  - `domain/repository/TrackingRepository.kt` -> `data/repository/LocalTrackingRepository.kt`
+- Watch-state workflow:
+  - watched IDs are stored locally using `watched_movie_ids`.
+  - player marks watched near completion and home supports `ALL/WATCHED/UNWATCHED` filter states.
 
 ## Navigation And State Guidance
 - Define routes in `navigation/TvNavGraph.kt` with stable argument keys (movie id, stream id).
@@ -66,12 +71,12 @@ navigation/             # Nav graph routes and typed arguments
 - Use `SavedStateHandle` in ViewModel for nav args.
 - Handle loading/error/empty states explicitly on each screen.
 
-## Migration Approach (Leanback -> Compose)
-1. Introduce Compose dependencies and theme while keeping existing Leanback flow running.
-2. Migrate **Home** to Compose first behind one activity entry.
-3. Migrate **Details** and **Player** to Compose Navigation.
-4. Remove fragment/layout artifacts only after parity is reached.
-5. Keep behavior equivalent during migration (focus behavior, browse -> details -> playback flow).
+## Legacy Cleanup Approach (Leanback -> Compose)
+1. Treat Compose flow as canonical for new work.
+2. Only touch Leanback fragments/activities for bug fixes or compatibility hotfixes.
+3. When removing legacy artifacts, preserve route parity (home -> details -> player) and remote navigation behavior.
+4. Remove old fragment/layout artifacts only after confirming no active code paths depend on them.
+5. Keep cleanup incremental and build-verified after each slice.
 
 ## Dependency Direction
 - `feature` may depend on `domain` and `core`.
@@ -82,4 +87,5 @@ navigation/             # Nav graph routes and typed arguments
 ## Testing Expectations
 - Unit test ViewModels and use cases.
 - Add navigation argument tests for critical paths (home -> details -> player).
+- Validate remote behavior for filter actions and focus restoration on home rows.
 - When Firestore query patterns change, update indexes and related instructions together.

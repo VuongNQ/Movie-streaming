@@ -8,6 +8,11 @@ applyTo: "android-app-tv/**"
 ## Purpose
 Use this instruction when implementing or refactoring Android TV UI behavior that is not primarily a data-layer task.
 
+Current active UI surfaces are Compose-based in:
+- `feature/home/*`
+- `feature/details/*`
+- `feature/player/*`
+
 ## Core UX Rules
 - Prioritize remote-first interaction: every interactive element must be reachable and operable by D-pad.
 - Use visible, stable focus states with sufficient contrast and scale so focused targets are obvious from TV viewing distance.
@@ -25,6 +30,8 @@ Use this instruction when implementing or refactoring Android TV UI behavior tha
 - Ensure initial focus is deterministic when a screen opens or a dialog appears.
 - Preserve focus restoration when returning from details or playback screens.
 - Avoid hidden focusable elements and ensure off-screen items are not accidentally focusable.
+- For multi-action controls (such as filter chips), prefer explicit selectable actions over hidden cycle toggles.
+- Avoid stacking extra `.focusable()` modifiers on controls that are already natively focusable unless there is a proven focus bug.
 
 ## Accessibility and Robustness
 - Ensure interactive elements have meaningful labels and accessible roles.
@@ -41,6 +48,7 @@ Use this instruction when implementing or refactoring Android TV UI behavior tha
 
 ## Validation Expectations
 - Verify D-pad traversal across critical paths: browse -> details -> playback -> back.
+- Verify Home filter traversal and activation for `ALL`, `WATCHED`, and `UNWATCHED` actions.
 - Validate focus behavior for loading, empty, and error states.
 - Confirm Android 10 TV-box compatibility for navigation and rendering behavior.
 - Add targeted tests when focus or navigation logic is changed.

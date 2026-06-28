@@ -25,7 +25,6 @@ import androidx.leanback.widget.RowPresenter
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import android.util.Log
-import android.widget.Toast
 
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.SimpleTarget
@@ -109,23 +108,9 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         actionAdapter.add(
             Action(
-                ACTION_WATCH_TRAILER,
-                resources.getString(R.string.watch_trailer_1),
-                resources.getString(R.string.watch_trailer_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
                 ACTION_RENT,
-                resources.getString(R.string.rent_1),
-                resources.getString(R.string.rent_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
-                ACTION_BUY,
-                resources.getString(R.string.buy_1),
-                resources.getString(R.string.buy_2)
+                resources.getString(R.string.rent_hd_price),
+                ""
             )
         )
         row.actionsAdapter = actionAdapter
@@ -137,7 +122,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         // Set detail background.
         val detailsPresenter = FullWidthDetailsOverviewRowPresenter(DetailsDescriptionPresenter())
         detailsPresenter.backgroundColor =
-            ContextCompat.getColor(context!!, R.color.selected_background)
+            ContextCompat.getColor(context!!, R.color.details_overlay_background)
 
         // Hook up transition element.
         val sharedElementHelper = FullWidthDetailsOverviewSharedElementHelper()
@@ -148,12 +133,10 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         detailsPresenter.isParticipatingEntranceTransition = true
 
         detailsPresenter.onActionClickedListener = OnActionClickedListener { action ->
-            if (action.id == ACTION_WATCH_TRAILER) {
+            if (action.id == ACTION_RENT) {
                 val intent = Intent(context!!, PlaybackActivity::class.java)
                 intent.putExtra(DetailsActivity.MOVIE, movie)
                 startActivity(intent)
-            } else {
-                Toast.makeText(context!!, action.toString(), Toast.LENGTH_SHORT).show()
             }
         }
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
@@ -161,7 +144,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     private fun setupRelatedMovieListRow() {
         val subcategories = arrayOf(getString(R.string.related_movies))
-        val list = MovieList.list
+        val list = MovieList.list(resources).toMutableList()
 
         Collections.shuffle(list)
         val listRowAdapter = ArrayObjectAdapter(CardPresenter())
@@ -207,9 +190,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     companion object {
         private val TAG = "VideoDetailsFragment"
 
-        private val ACTION_WATCH_TRAILER = 1L
         private val ACTION_RENT = 2L
-        private val ACTION_BUY = 3L
 
         private val DETAIL_THUMB_WIDTH = 274
         private val DETAIL_THUMB_HEIGHT = 274

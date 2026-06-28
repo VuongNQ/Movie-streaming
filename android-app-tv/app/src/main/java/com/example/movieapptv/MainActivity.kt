@@ -1,20 +1,22 @@
 package com.example.movieapptv
 
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import com.example.movieapptv.app.TvAppRoot
+import com.example.movieapptv.core.designsystem.MovieTvTheme
 
 /**
- * Loads [MainFragment].
+ * Compose entry-point for Android TV app.
  */
-class MainActivity : FragmentActivity() {
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
-                .replace(R.id.main_browse_fragment, MainFragment())
-                .commitNow()
+        setContent {
+            MovieTvTheme {
+                TvAppRoot()
+            }
         }
     }
 }
