@@ -65,3 +65,4 @@ Thumbs.db
 
 # Movies crawler local drafts
 crawl-drafts/
+android-app-tv/app/release/*
