@@ -75,7 +75,7 @@ fun DetailsRoute(
         watchButtonFocusRequester.requestFocus()
     }
 
-    val hasLiveStream = movie.preferredLiveStream() != null
+    val hasLiveStream = movie.liveStreams().isNotEmpty()
 
     Box(modifier = Modifier.fillMaxSize()) {
         AsyncImage(

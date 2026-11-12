@@ -27,14 +27,6 @@ data class Movie(
     val createdAt: String,
     val lastUpdated: String,
 ) {
-    fun preferredLiveStream(preferredAudioType: String? = null): StreamConnection? {
-        val liveConnections = streamConnections.filter { it.status == "live" }
-        if (liveConnections.isEmpty()) {
-            return null
-        }
-        if (!preferredAudioType.isNullOrBlank()) {
-            liveConnections.firstOrNull { it.type == preferredAudioType }?.let { return it }
-        }
-        return liveConnections.firstOrNull()
-    }
+    fun liveStreams(): List<StreamConnection> =
+        streamConnections.filter { it.status == "live" }.distinctBy { it.link }
 }

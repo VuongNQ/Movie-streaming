@@ -3,6 +3,7 @@ import type {
   CrawlRuntimeResponse,
   CrawledMovieEntry,
   DisplayMode,
+  ExtensionState,
   MovieCrawlState,
   PageMetadata,
   RuntimeResponse,
@@ -24,7 +25,11 @@ import {
   extractMovieLinksFromPage,
 } from "../crawler/movieListCrawler";
 import { buildTrackingKey } from "../utils/deduplicator";
-import { buildLinkMetadata, detectM3u8 } from "../utils/urlFilter";
+import {
+  buildLinkMetadata,
+  detectM3u8,
+  findPageParameterM3u8,
+} from "../utils/urlFilter";
 
 type CaptureRequest =
   | { type: "GET_STATE" }
@@ -169,9 +174,20 @@ async function runMovieCrawl(searchUrl: string): Promise<void> {
 }
 
 const DEBUGGER_VERSION = "1.3";
-let attachedTabId: number | null = null;
-const iframeSessionIds = new Set<string>();
-const processedPageParameterUrls = new Set<string>();
+interface CaptureSession {
+  tabId: number;
+  windowId: number;
+  iframeSessionIds: Set<string>;
+}
+
+let captureSession: CaptureSession | null = null;
+let pendingCaptureTask = Promise.resolve();
+
+function runCaptureTask<T>(task: () => Promise<T>): Promise<T> {
+  const result = pendingCaptureTask.then(task);
+  pendingCaptureTask = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 interface ResponsePayload {
   url?: string;
@@ -221,214 +237,149 @@ async function readPageMetadata(tabId: number): Promise<PageMetadata | null> {
   }
 }
 
-async function extractM3u8FromPageParams(
-  tabId: number,
-): Promise<string | null> {
-  try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!tab.url) return null;
+async function recordLink(
+  state: ExtensionState,
+  tab: chrome.tabs.Tab,
+  url: string,
+  source: CapturedLink["source"],
+  contentType: string | null,
+  fromPageParameter = false,
+): Promise<ExtensionState> {
+  const tabUrl = tab.url ?? null;
+  const trackingKey = buildTrackingKey(url, tabUrl);
+  const existing = state.history.find((item) => item.trackingKey === trackingKey);
+  if (existing && fromPageParameter) return state;
 
-    const pageUrl = new URL(tab.url);
-    // Check common parameter names: url, link, stream, src, m3u8, playlist
-    const paramNames = ["url", "link", "stream", "src", "m3u8", "playlist"];
-    for (const paramName of paramNames) {
-      const paramValue = pageUrl.searchParams.get(paramName);
-      if (paramValue && paramValue.toLowerCase().includes(".m3u8")) {
-        try {
-          // Try to decode the URL in case it's encoded
-          const decodedUrl = decodeURIComponent(paramValue);
-          if (decodedUrl.startsWith("http")) {
-            return decodedUrl;
-          }
-        } catch {
-          // If decoding fails, try the original value
-          if (paramValue.startsWith("http")) {
-            return paramValue;
-          }
-        }
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-async function broadcastState(state: unknown): Promise<void> {
-  try {
-    await chrome.runtime.sendMessage({ type: "STATE_UPDATED", state });
-  } catch {
-    // Popup may be closed; ignore delivery failures.
-  }
-}
-
-function targetFor(tabId: number): chrome.debugger.Debuggee {
-  return { tabId };
-}
-
-function targetForSession(
-  tabId: number,
-  sessionId: string,
-): chrome.debugger.Debuggee {
-  return { tabId, sessionId } as chrome.debugger.Debuggee;
-}
-
-function isKnownCaptureTarget(source: chrome.debugger.Debuggee): boolean {
-  if (attachedTabId === null) {
-    return false;
-  }
-
-  const debuggee = source as DebuggeeWithSession;
-  if (debuggee.tabId === attachedTabId) {
-    return true;
-  }
-
-  return (
-    typeof debuggee.sessionId === "string" &&
-    iframeSessionIds.has(debuggee.sessionId)
-  );
-}
-
-async function getCurrentActiveTabId(): Promise<number> {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tabId = tabs[0]?.id;
-  if (typeof tabId !== "number") {
-    throw new Error("No active tab found.");
-  }
-  return tabId;
-}
-
-async function attachToTab(tabId: number): Promise<void> {
-  attachedTabId = tabId;
-  iframeSessionIds.clear();
-  const rootTarget = targetFor(tabId);
-  await chrome.debugger.attach(rootTarget, DEBUGGER_VERSION);
-  await chrome.debugger.sendCommand(rootTarget, "Target.setAutoAttach", {
-    autoAttach: true,
-    waitForDebuggerOnStart: false,
-    flatten: true,
+  const now = new Date().toISOString();
+  const tabId = tab.id;
+  if (typeof tabId !== "number") return state;
+  return appendCapturedLink({
+    trackingKey,
+    url,
+    tabUrl,
+    pageTitle: tab.title ?? null,
+    pageMetadata: existing || fromPageParameter ? null : await readPageMetadata(tabId),
+    firstSeenAt: now,
+    detectedAt: now,
+    captureCount: 1,
+    tabId,
+    contentType,
+    source,
+    linkMetadata: buildLinkMetadata(url, contentType),
   });
-  await chrome.debugger.sendCommand(rootTarget, "Network.enable");
 }
 
-async function detachFromTab(tabId: number): Promise<void> {
-  const rootTarget = targetFor(tabId);
-  try {
-    await chrome.debugger.sendCommand(rootTarget, "Target.setAutoAttach", {
-      autoAttach: false,
-      waitForDebuggerOnStart: false,
-      flatten: true,
-    });
-  } catch {
-    // Ignore detach preconditions from stale targets.
+async function stopCapture(): Promise<ExtensionState> {
+  const session = captureSession;
+  captureSession = null;
+  if (session) {
+    // Chrome can detach first when a tab closes or DevTools opens.
+    await chrome.debugger.detach({ tabId: session.tabId }).catch(() => undefined);
   }
-  try {
-    await chrome.debugger.sendCommand(rootTarget, "Network.disable");
-  } catch {
-    // Ignore detach preconditions from stale targets.
-  }
-  await chrome.debugger.detach(rootTarget);
-  if (attachedTabId === tabId) {
-    attachedTabId = null;
-    iframeSessionIds.clear();
-    processedPageParameterUrls.clear();
-  }
+  return setCaptureSession(false, null);
 }
 
-chrome.debugger.onEvent.addListener(async (source, method, params) => {
-  if (method === "Target.attachedToTarget" && source.tabId === attachedTabId) {
-    const payload = params as TargetAttachedParams;
-    const sessionId = payload.sessionId;
-    if (
-      payload.targetInfo?.type === "iframe" &&
-      typeof sessionId === "string" &&
-      attachedTabId !== null
-    ) {
-      iframeSessionIds.add(sessionId);
-      await chrome.debugger.sendCommand(
-        targetForSession(attachedTabId, sessionId),
-        "Network.enable",
-      );
+async function startCapture(): Promise<ExtensionState> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabId = tab?.id;
+  if (typeof tabId !== "number") throw new Error("No active tab found.");
+
+  if (captureSession?.tabId !== tabId) {
+    await stopCapture();
+    const target = { tabId };
+    try {
+      await chrome.debugger.attach(target, DEBUGGER_VERSION);
+      captureSession = { tabId, windowId: tab.windowId, iframeSessionIds: new Set() };
+      await chrome.debugger.sendCommand(target, "Target.setAutoAttach", {
+        autoAttach: true,
+        waitForDebuggerOnStart: false,
+        flatten: true,
+      });
+      await chrome.debugger.sendCommand(target, "Network.enable");
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id !== tabId) {
+        throw new Error("The active tab changed. Start capture again on the current tab.");
+      }
+    } catch (error) {
+      await stopCapture();
+      throw error;
+    }
+  }
+
+  const state = await setCaptureSession(true, tabId);
+  const currentTab = await chrome.tabs.get(tabId);
+  const paramM3u8 = currentTab.url ? findPageParameterM3u8(currentTab.url) : null;
+  return paramM3u8 ? recordLink(state, currentTab, paramM3u8, "url", null, true) : state;
+}
+
+function stopSession(session: CaptureSession): void {
+  void runCaptureTask(async () => {
+    if (captureSession === session) await stopCapture();
+  }).catch(() => undefined);
+}
+
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  const session = captureSession;
+  if (session && windowId === session.windowId && tabId !== session.tabId) {
+    stopSession(session);
+  }
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  const session = captureSession;
+  if (session && windowId !== chrome.windows.WINDOW_ID_NONE && windowId !== session.windowId) {
+    stopSession(session);
+  }
+});
+
+chrome.debugger.onDetach.addListener((source) => {
+  const session = captureSession;
+  if (session && source.tabId === session.tabId) stopSession(session);
+});
+
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  const session = captureSession;
+  const debuggee = source as DebuggeeWithSession;
+  if (!session || debuggee.tabId !== session.tabId) return;
+  if (debuggee.sessionId && !session.iframeSessionIds.has(debuggee.sessionId)) return;
+
+  if (method === "Target.attachedToTarget") {
+    const { sessionId, targetInfo } = params as TargetAttachedParams;
+    if (targetInfo?.type === "iframe" && typeof sessionId === "string") {
+      session.iframeSessionIds.add(sessionId);
+      const target = { tabId: session.tabId, sessionId } as DebuggeeWithSession;
+      void chrome.debugger.sendCommand(target, "Network.enable").catch(() => {
+        session.iframeSessionIds.delete(sessionId);
+      });
     }
     return;
   }
 
   if (method === "Target.detachedFromTarget") {
-    const payload = params as TargetDetachedParams;
-    if (typeof payload.sessionId === "string") {
-      iframeSessionIds.delete(payload.sessionId);
-    }
+    const { sessionId } = params as TargetDetachedParams;
+    if (typeof sessionId === "string") session.iframeSessionIds.delete(sessionId);
     return;
   }
 
-  if (method !== "Network.responseReceived") {
-    return;
-  }
-
-  if (!isKnownCaptureTarget(source) || attachedTabId === null) {
-    return;
-  }
-
-  const tabId = attachedTabId;
-
-  const state = await getState();
-  if (!state.isCapturing || state.activeTabId !== tabId) {
-    return;
-  }
-
+  if (method !== "Network.responseReceived") return;
   const response = (params as { response?: ResponsePayload }).response;
-  const responseUrl = response?.url;
-  if (!responseUrl) {
-    return;
-  }
+  const url = response?.url;
+  if (!url) return;
+  const contentType = response?.mimeType ?? null;
+  const { source: matchSource } = detectM3u8(url, contentType);
+  if (!matchSource) return;
 
-  // Debug: log all network requests to browser console for troubleshooting
-  console.log("[m3u8-capture-debug]", {
-    url: responseUrl,
-    mimeType: response?.mimeType ?? "unknown",
-    isM3u8Candidate: responseUrl.toLowerCase().includes(".m3u8"),
+  void runCaptureTask(async () => {
+    if (captureSession !== session) return;
+    const tab = await chrome.tabs.get(session.tabId);
+    if (!tab.active) {
+      await stopCapture();
+      return;
+    }
+    await recordLink(await getState(), tab, url, matchSource, contentType);
+  }).catch(() => {
+    // The target can disappear while a response is being processed.
   });
-
-  const matched = detectM3u8(responseUrl, response?.mimeType);
-  if (!matched.matched || !matched.source) {
-    return;
-  }
-
-  const tab = await chrome.tabs.get(tabId);
-  const tabUrl = tab.url ?? null;
-  const trackingKey = buildTrackingKey(responseUrl, tabUrl);
-  const existing = state.history.find(
-    (item) => item.trackingKey === trackingKey,
-  );
-  const pageMetadata = existing ? null : await readPageMetadata(tabId);
-
-  const now = new Date().toISOString();
-
-  const link: CapturedLink = {
-    trackingKey,
-    url: responseUrl,
-    tabUrl,
-    pageTitle: tab.title ?? null,
-    pageMetadata,
-    firstSeenAt: now,
-    detectedAt: now,
-    captureCount: 1,
-    tabId,
-    contentType: response?.mimeType ?? null,
-    source: matched.source,
-    linkMetadata: buildLinkMetadata(responseUrl, response?.mimeType),
-  };
-
-  const nextState = await appendCapturedLink(link);
-  await broadcastState(nextState);
-});
-
-chrome.debugger.onDetach.addListener(async (source) => {
-  if (typeof source.tabId === "number" && source.tabId === attachedTabId) {
-    attachedTabId = null;
-    const nextState = await setCaptureSession(false, null);
-    await broadcastState(nextState);
-  }
 });
 
 chrome.runtime.onMessage.addListener(
@@ -436,77 +387,22 @@ chrome.runtime.onMessage.addListener(
     void (async () => {
       try {
         if (request.type === "GET_STATE") {
-          const state = await getState();
+          const state = await runCaptureTask(async () => {
+            const stored = await getState();
+            return stored.isCapturing && !captureSession ? stopCapture() : stored;
+          });
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
           return;
         }
 
         if (request.type === "SET_MODE") {
-          const state = await setMode(request.mode);
+          const state = await runCaptureTask(() => setMode(request.mode));
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
           return;
         }
 
-        if (request.type === "START_CAPTURE") {
-          const tabId = await getCurrentActiveTabId();
-
-          if (attachedTabId !== null && attachedTabId !== tabId) {
-            await detachFromTab(attachedTabId);
-          }
-
-          if (attachedTabId === null) {
-            await attachToTab(tabId);
-          }
-
-          const state = await setCaptureSession(true, tabId);
-
-          // Check for m3u8 URL in page parameters (fallback for player pages)
-          const paramM3u8 = await extractM3u8FromPageParams(tabId);
-          if (
-            paramM3u8 &&
-            !processedPageParameterUrls.has(paramM3u8)
-          ) {
-            processedPageParameterUrls.add(paramM3u8);
-            const tab = await chrome.tabs.get(tabId);
-            const tabUrl = tab.url ?? null;
-            const trackingKey = buildTrackingKey(paramM3u8, tabUrl);
-            const existing = state.history.find(
-              (item) => item.trackingKey === trackingKey,
-            );
-
-            if (!existing) {
-              const now = new Date().toISOString();
-              const link: CapturedLink = {
-                trackingKey,
-                url: paramM3u8,
-                tabUrl,
-                pageTitle: tab.title ?? null,
-                pageMetadata: null,
-                firstSeenAt: now,
-                detectedAt: now,
-                captureCount: 1,
-                tabId,
-                contentType: "application/vnd.apple.mpegurl",
-                source: "url",
-                linkMetadata: buildLinkMetadata(paramM3u8),
-              };
-
-              const nextState = await appendCapturedLink(link);
-              await broadcastState(nextState);
-            }
-          }
-
-          sendResponse({ ok: true, state } satisfies RuntimeResponse);
-          return;
-        }
-
-        if (request.type === "STOP_CAPTURE") {
-          if (attachedTabId !== null) {
-            await detachFromTab(attachedTabId);
-          }
-
-          processedPageParameterUrls.clear();
-          const state = await setCaptureSession(false, null);
+        if (request.type === "START_CAPTURE" || request.type === "STOP_CAPTURE") {
+          const state = await runCaptureTask(request.type === "START_CAPTURE" ? startCapture : stopCapture);
           sendResponse({ ok: true, state } satisfies RuntimeResponse);
           return;
         }

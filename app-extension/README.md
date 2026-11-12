@@ -27,3 +27,4 @@ npm run build
 4. Switch between latest and history modes.
 5. Use Copy link and verify clipboard output.
 6. Click Stop capture and confirm no new links are collected.
+7. Start capture again and switch to a different tab or Chrome window. Reopen the popup and confirm capture has stopped and the recorded links are still available.

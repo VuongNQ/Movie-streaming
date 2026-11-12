@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLinkMetadata, detectM3u8, isHttpScheme } from '../src/utils/urlFilter'
+import { buildLinkMetadata, detectM3u8, findPageParameterM3u8, isHttpScheme } from '../src/utils/urlFilter'
 
 describe('isHttpScheme', () => {
   it('accepts http and https', () => {
@@ -52,5 +52,20 @@ describe('buildLinkMetadata', () => {
   it('extracts codec hints from content type', () => {
     const metadata = buildLinkMetadata('https://cdn.example.com/live/master.m3u8', 'application/vnd.apple.mpegurl; codecs=avc1.4d401f')
     expect(metadata.codec).toBe('avc1.4d401f')
+  })
+})
+
+describe('findPageParameterM3u8', () => {
+  const signedUrl = 'https://cdn.example.com/live/master.m3u8?token=a%2Fb%2Bc%3D&expires=1900000000'
+
+  it.each([signedUrl, encodeURIComponent(signedUrl)])('preserves the signed stream URL when nested in a player URL', (value) => {
+    const page = new URL('https://example.com/player')
+    page.searchParams.set('src', value)
+    expect(findPageParameterM3u8(page.href)).toBe(signedUrl)
+  })
+
+  it('skips non-HTTP URLs and malformed parameters', () => {
+    const page = 'https://example.com/player?src=file%3A%2F%2F%2Fstream.m3u8&url=%25E0%25A4%25A'
+    expect(findPageParameterM3u8(page)).toBeNull()
   })
 })
