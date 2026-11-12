@@ -61,24 +61,22 @@ async function main() {
   connectFunctionsEmulator(clientFunctions, functionsEmulator.host, functionsEmulator.port)
 
   const disableCallable = httpsCallable(clientFunctions, 'adminSetUserDisabled')
+  const createCallable = httpsCallable(clientFunctions, 'adminCreateUser')
   const resetCallable = httpsCallable(clientFunctions, 'adminGeneratePasswordResetLink')
   const deleteCallable = httpsCallable(clientFunctions, 'adminDeleteAuthUser')
 
-  const createdUid = 'target-smoke'
-  await adminAuth.createUser({
-    uid: createdUid,
+  const created = await createCallable({
     email: 'target-smoke@example.com',
     password: 'TargetPass#123',
-    displayName: 'Target Smoke',
-  })
-
-  await adminDb.collection('users').doc(createdUid).set({
-    uid: createdUid,
     username: 'target-user',
     role: 'user',
-    created_at: new Date().toISOString(),
-    account_status: 'active',
   })
+  const createdUid = created.data.uid
+  const createdProfile = await adminDb.collection('users').doc(createdUid).get()
+  if (!createdProfile.exists || createdProfile.get('approved') !== false) {
+    throw new Error('New account must have a pending profile')
+  }
+  await adminDb.collection('users').doc(createdUid).update({ approved: true })
 
   const disabled = await disableCallable({ uid: createdUid, disabled: true })
   if (disabled.data.disabled !== true) {
@@ -129,7 +127,7 @@ async function main() {
     throw new Error('Target Firestore profile still exists after adminDeleteAuthUser')
   }
 
-  console.log('SMOKE PASS: admin disable/reset/delete callable endpoints are working on emulators')
+  console.log('SMOKE PASS: admin create/approve/disable/reset/delete lifecycle works on emulators')
   console.log(`Firestore emulator host: ${firestoreHost}`)
 }
 

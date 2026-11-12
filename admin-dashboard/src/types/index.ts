@@ -65,6 +65,13 @@ export interface User {
 export type UserInput = Omit<User, 'uid' | 'created_at'>
 export type UserCreateInput = Pick<User, 'uid' | 'username' | 'role'>
 
+export interface AdminCreateUserInput {
+  email: string
+  password: string
+  username: string
+  role: 'guest' | 'user'
+}
+
 export interface AdminSetUserDisabledInput {
   uid: string
   disabled: boolean

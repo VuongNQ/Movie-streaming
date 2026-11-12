@@ -1,6 +1,7 @@
 import { httpsCallable } from 'firebase/functions'
 import { functionsClient } from './firebase'
 import type {
+  AdminCreateUserInput,
   AdminDeleteAuthUserInput,
   AdminGeneratePasswordResetLinkInput,
   AdminSetUserDisabledInput,
@@ -28,6 +29,15 @@ function mapCallableError(error: unknown): Error {
 }
 
 export const adminAuth = {
+  async createUser(payload: AdminCreateUserInput): Promise<{ uid: string }> {
+    try {
+      const callable = httpsCallable<AdminCreateUserInput, { uid: string }>(functionsClient, 'adminCreateUser')
+      const response = await callable(payload)
+      return response.data
+    } catch (error) {
+      throw mapCallableError(error)
+    }
+  },
   async setUserDisabled(payload: AdminSetUserDisabledInput): Promise<{ uid: string; disabled: boolean }> {
     try {
       const callable = httpsCallable<AdminSetUserDisabledInput, { uid: string; disabled: boolean }>(

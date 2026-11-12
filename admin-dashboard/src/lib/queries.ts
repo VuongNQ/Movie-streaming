@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { firestore } from './firestore'
 import { adminAuth } from './adminAuth'
 import type {
+  AdminCreateUserInput,
   AdminDeleteAuthUserInput,
   AdminGeneratePasswordResetLinkInput,
   AdminSetUserDisabledInput,
@@ -99,6 +100,20 @@ export function useCreateUser() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.usersList }),
         queryClient.invalidateQueries({ queryKey: queryKeys.userById(user.uid) }),
+      ])
+    },
+  })
+}
+
+export function useProvisionUser() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: AdminCreateUserInput) => adminAuth.createUser(payload),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.usersList }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.userById(result.uid) }),
       ])
     },
   })

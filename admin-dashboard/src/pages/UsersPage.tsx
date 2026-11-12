@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import {
   useCreateUser,
+  useProvisionUser,
   useDeleteAuthUser,
   useGeneratePasswordResetLink,
   useSetUserDisabled,
@@ -33,6 +34,8 @@ const defaultCreateState = {
 export function UsersPage() {
   const { data, isLoading, error } = useUsers()
   const createUser = useCreateUser()
+  const provisionUser = useProvisionUser()
+  const [newAccount, setNewAccount] = useState({ email: '', password: '', username: '', role: 'user' as 'user' | 'guest' })
   const deleteAuthUser = useDeleteAuthUser()
   const setUserDisabled = useSetUserDisabled()
   const generatePasswordResetLink = useGeneratePasswordResetLink()
@@ -51,6 +54,18 @@ export function UsersPage() {
       role: createForm.role,
     })
     setCreateForm(defaultCreateState)
+    setShowCreateForm(false)
+  }
+
+  async function handleProvisionUser(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    await provisionUser.mutateAsync({
+      email: newAccount.email.trim(),
+      password: newAccount.password,
+      username: newAccount.username.trim(),
+      role: newAccount.role,
+    })
+    setNewAccount({ email: '', password: '', username: '', role: 'user' })
     setShowCreateForm(false)
   }
 
@@ -113,6 +128,7 @@ export function UsersPage() {
   }
 
   const mutationError =
+    provisionUser.error ??
     createUser.error ??
     deleteAuthUser.error ??
     setUserDisabled.error ??
@@ -131,7 +147,49 @@ export function UsersPage() {
       {showCreateForm ? (
         <Card className="border-border/80 shadow-none">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Create user profile (manual auth)</CardTitle>
+            <CardTitle className="text-base">Create account</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <form className="grid gap-3 md:grid-cols-2" onSubmit={handleProvisionUser}>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-email">Email</Label>
+                <Input id="new-account-email" type="email" required value={newAccount.email}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, email: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-username">Username</Label>
+                <Input id="new-account-username" required value={newAccount.username}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, username: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-password">Initial password</Label>
+                <Input id="new-account-password" type="password" required minLength={6} autoComplete="new-password"
+                  value={newAccount.password}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, password: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-role">Role</Label>
+                <select id="new-account-role" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={newAccount.role}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, role: event.target.value as 'user' | 'guest' }))}>
+                  <option value="user">user</option>
+                  <option value="guest">guest</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <Button type="submit" size="sm" disabled={provisionUser.isPending}>
+                  {provisionUser.isPending ? 'Creating...' : 'Create account pending approval'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showCreateForm ? (
+        <Card className="border-border/80 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Link an existing Firebase Auth account</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
             <form className="grid gap-3 md:grid-cols-3" onSubmit={handleCreateUser}>
