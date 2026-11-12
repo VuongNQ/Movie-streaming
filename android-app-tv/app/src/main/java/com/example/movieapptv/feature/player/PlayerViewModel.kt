@@ -37,7 +37,11 @@ class PlayerViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
                 val movie = movieRepository.getMovieById(movieId)
-                val position = trackingRepository.getPositionSeconds(movieId)
+                val position = if (trackingRepository.isMovieWatched(movieId)) {
+                    0
+                } else {
+                    trackingRepository.getPositionSeconds(movieId)
+                }
                 movie to position
             }.onSuccess { (movie, position) ->
                 _uiState.value = PlayerUiState(

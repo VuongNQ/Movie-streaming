@@ -1,4 +1,5 @@
 import type { CapturedLink, CrawlRuntimeResponse, DisplayMode, ExtensionState, MovieCrawlState, RuntimeResponse } from '../types'
+import { STORAGE_KEY } from '../storage/extensionStorage'
 import './popup.css'
 
 function getRequiredElement<T extends Element>(selector: string): T {
@@ -16,7 +17,7 @@ const statusText = getRequiredElement<HTMLParagraphElement>('#statusText')
 const feedbackText = getRequiredElement<HTMLParagraphElement>('#feedbackText')
 const linksContainer = getRequiredElement<HTMLDivElement>('#linksContainer')
 
-let currentState: ExtensionState | null = null
+let stateUpdates = 0
 
 function setFeedback(message: string, isError = false): void {
   feedbackText.textContent = message
@@ -134,7 +135,6 @@ function createLinkCard(link: CapturedLink): HTMLElement {
 }
 
 function renderState(state: ExtensionState): void {
-  currentState = state
   modeSelect.value = state.mode
   statusText.textContent = state.isCapturing
     ? `Capturing active tab ${state.activeTabId ?? ''}`
@@ -143,16 +143,21 @@ function renderState(state: ExtensionState): void {
 }
 
 async function sendMessage(request: { type: string; mode?: DisplayMode }): Promise<RuntimeResponse> {
-  return chrome.runtime.sendMessage(request) as Promise<RuntimeResponse>
+  try {
+    return await chrome.runtime.sendMessage(request) as RuntimeResponse
+  } catch {
+    return { ok: false, message: 'Unable to contact the capture service.' }
+  }
 }
 
 async function refreshState(): Promise<void> {
+  const previousUpdates = stateUpdates
   const result = await sendMessage({ type: 'GET_STATE' })
   if (!result.ok || !result.state) {
     setFeedback(result.message ?? 'Unable to read state.', true)
     return
   }
-  renderState(result.state)
+  if (stateUpdates === previousUpdates) renderState(result.state)
 }
 
 async function setMode(mode: DisplayMode): Promise<void> {
@@ -162,7 +167,6 @@ async function setMode(mode: DisplayMode): Promise<void> {
     return
   }
 
-  renderState(result.state)
   setFeedback(`Mode set to ${mode}.`)
 }
 
@@ -173,7 +177,6 @@ async function toggleCapture(start: boolean): Promise<void> {
     return
   }
 
-  renderState(result.state)
   setFeedback(start ? 'Capture started.' : 'Capture stopped.')
 }
 
@@ -196,6 +199,14 @@ stopButton.addEventListener('click', () => {
 
 modeSelect.addEventListener('change', () => {
   void setMode(modeSelect.value as DisplayMode)
+})
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  const state = changes[STORAGE_KEY]?.newValue as ExtensionState | undefined
+  if (area === 'local' && state) {
+    stateUpdates += 1
+    renderState(state)
+  }
 })
 
 void refreshState()
@@ -314,16 +325,10 @@ copyAllUrlsButton.addEventListener('click', () => {
   })
 })
 
-chrome.runtime.onMessage.addListener((message: { type?: string; state?: ExtensionState; crawlState?: MovieCrawlState }) => {
-  if (message.type === 'STATE_UPDATED' && message.state) {
-    renderState(message.state)
-  }
+chrome.runtime.onMessage.addListener((message: { type?: string; crawlState?: MovieCrawlState }) => {
   if (message.type === 'CRAWL_STATE_UPDATED' && message.crawlState) {
     renderCrawlState(message.crawlState)
   }
 })
 
 void refreshCrawlState()
-
-// Preserve explicit reference for potential debugging hooks without altering behavior.
-void currentState

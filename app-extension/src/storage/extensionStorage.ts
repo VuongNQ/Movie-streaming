@@ -1,7 +1,7 @@
 import type { CapturedLink, DisplayMode, ExtensionState } from '../types'
 import { upsertTrackedLink } from '../utils/deduplicator'
 
-const STORAGE_KEY = 'm3u8_state_v1'
+export const STORAGE_KEY = 'm3u8_state_v1'
 const DEFAULT_HISTORY_SIZE = 5
 
 const defaultState: ExtensionState = {

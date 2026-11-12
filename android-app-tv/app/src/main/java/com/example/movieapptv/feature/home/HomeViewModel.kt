@@ -44,18 +44,7 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
-                val movies = movieRepository.getMovies()
-                val continueWatchingMovieId = trackingRepository.getLastWatchedMovieId()
-                val watchedMovieIds = trackingRepository.getWatchedMovieIds()
-                val selectedFilter = _uiState.value.selectedFilter
-                _uiState.value = HomeUiState(
-                    isLoading = false,
-                    movies = movies,
-                    filteredMovies = applyFilter(movies, watchedMovieIds, selectedFilter),
-                    selectedFilter = selectedFilter,
-                    watchedMovieIds = watchedMovieIds,
-                    continueWatchingMovieId = continueWatchingMovieId,
-                )
+                updateMoviesAndTracking(movieRepository.getMovies())
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
@@ -64,6 +53,25 @@ class HomeViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun refreshTracking() {
+        viewModelScope.launch { updateMoviesAndTracking() }
+    }
+
+    private suspend fun updateMoviesAndTracking(loadedMovies: List<Movie>? = null) {
+        val lastWatchedMovieId = trackingRepository.getLastWatchedMovieId()
+        val watchedMovieIds = trackingRepository.getWatchedMovieIds()
+        _uiState.update { state ->
+            val movies = loadedMovies ?: state.movies
+            state.copy(
+                isLoading = loadedMovies == null && state.isLoading,
+                movies = movies,
+                filteredMovies = applyFilter(movies, watchedMovieIds, state.selectedFilter),
+                watchedMovieIds = watchedMovieIds,
+                continueWatchingMovieId = lastWatchedMovieId?.takeUnless { it in watchedMovieIds },
+            )
         }
     }
 

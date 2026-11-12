@@ -21,6 +21,32 @@ const HLS_CONTENT_TYPES = new Set([
   'application/x-mpegurl',
 ])
 
+export function findPageParameterM3u8(pageUrl: string): string | null {
+  let params: URLSearchParams
+  try {
+    params = new URL(pageUrl).searchParams
+  } catch {
+    return null
+  }
+
+  for (const key of ['url', 'link', 'stream', 'src', 'm3u8', 'playlist']) {
+    const candidate = params.get(key)
+    if (!candidate) continue
+    // searchParams has already decoded one layer. Keep signed query strings intact.
+    if (isHttpScheme(candidate)) {
+      if (detectM3u8(candidate).matched) return candidate
+      continue
+    }
+    try {
+      const decoded = decodeURIComponent(candidate)
+      if (detectM3u8(decoded).matched) return decoded
+    } catch {
+      // Skip malformed encodings and check the remaining parameters.
+    }
+  }
+  return null
+}
+
 export function isHttpScheme(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl)

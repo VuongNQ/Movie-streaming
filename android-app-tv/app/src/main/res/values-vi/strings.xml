@@ -48,6 +48,9 @@
     <string name="player_loading">Đang tải trình phát...</string>
     <string name="player_no_live_stream">Không có luồng phát trực tiếp</string>
     <string name="player_unknown_state">Trạng thái trình phát không xác định</string>
+    <string name="player_playback_failed">Không phát được phim từ các nguồn hiện có.</string>
+    <string name="player_retry">Thử phát lại</string>
+    <string name="player_back">Về chi tiết phim</string>
 
     <string name="error_movie_not_found">Không tìm thấy phim</string>
     <string name="error_load_movies">Không thể tải danh sách phim</string>

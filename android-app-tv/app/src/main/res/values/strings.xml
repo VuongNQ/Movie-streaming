@@ -48,6 +48,9 @@
     <string name="player_loading">Loading player...</string>
     <string name="player_no_live_stream">No live stream available</string>
     <string name="player_unknown_state">Unknown player state</string>
+    <string name="player_playback_failed">None of the available streams could play.</string>
+    <string name="player_retry">Retry playback</string>
+    <string name="player_back">Back to details</string>
 
     <string name="error_movie_not_found">Movie not found</string>
     <string name="error_load_movies">Failed to load movies</string>
