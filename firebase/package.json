@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test:rules": "firebase emulators:exec --project movie-streaming-rules-tests --config ../firebase.json --only firestore \"npm run test:rules:unit\"",
-    "test:rules:unit": "vitest run",
+    "test:rules:unit": "vitest run --no-file-parallelism",
     "test:functions:admin-lifecycle": "firebase emulators:exec --project movie-streaming-rules-tests --config ../firebase.json --only auth,firestore,functions \"node scripts/smoke-admin-auth-lifecycle.mjs\""
   },
   "devDependencies": {

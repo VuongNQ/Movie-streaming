@@ -11,6 +11,16 @@
         <h1>m3u8 Capture</h1>
       </header>
 
+      <section id="authSection">
+        <form id="loginForm">
+          <input id="loginEmail" type="email" placeholder="Email" required />
+          <input id="loginPassword" type="password" placeholder="Password" required />
+          <button type="submit">Sign in</button>
+        </form>
+        <p id="authStatus" aria-live="polite"></p>
+        <button id="logoutButton" type="button" hidden>Sign out</button>
+      </section>
+      <div id="authorizedContent" hidden>
       <section class="controls">
         <button id="startCapture" type="button">Start capture</button>
         <button id="stopCapture" type="button" class="muted">Stop capture</button>
@@ -57,6 +67,7 @@
           <button id="copyAllUrls" type="button" class="muted">Copy JSON</button>
         </div>
       </section>
+      </div>
     </main>
     <script type="module" src="/src/popup/popup.ts"></script>
   </body>

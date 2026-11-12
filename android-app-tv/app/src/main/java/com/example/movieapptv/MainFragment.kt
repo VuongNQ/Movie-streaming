@@ -88,18 +88,18 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun loadRows() {
-        val list = MovieList.list
+        val list = MovieList.remoteMovies.toMutableList()
 
         val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
         val cardPresenter = CardPresenter()
 
-        for (i in 0 until NUM_ROWS) {
+        for (i in 0 until (if (list.isEmpty()) 0 else NUM_ROWS)) {
             if (i != 0) {
                 Collections.shuffle(list)
             }
             val listRowAdapter = ArrayObjectAdapter(cardPresenter)
             for (j in 0 until NUM_COLS) {
-                listRowAdapter.add(list[j % 5])
+                listRowAdapter.add(list[j % list.size])
             }
             val header = HeaderItem(i.toLong(), MovieList.MOVIE_CATEGORY[i])
             rowsAdapter.add(ListRow(header, listRowAdapter))
@@ -111,7 +111,7 @@ class MainFragment : BrowseSupportFragment() {
         val gridRowAdapter = ArrayObjectAdapter(mGridPresenter)
         gridRowAdapter.add(resources.getString(R.string.grid_view))
         gridRowAdapter.add(getString(R.string.error_fragment))
-        gridRowAdapter.add(resources.getString(R.string.personal_settings))
+        gridRowAdapter.add("Sign out")
         rowsAdapter.add(ListRow(gridHeader, gridRowAdapter))
 
         adapter = rowsAdapter
@@ -148,6 +148,10 @@ class MainFragment : BrowseSupportFragment() {
                     .toBundle()
                 startActivity(intent, bundle)
             } else if (item is String) {
+                if (item == "Sign out") {
+                    (activity as? MainActivity)?.signOut()
+                    return
+                }
                 if (item.contains(getString(R.string.error_fragment))) {
                     val intent = Intent(context!!, BrowseErrorActivity::class.java)
                     startActivity(intent)

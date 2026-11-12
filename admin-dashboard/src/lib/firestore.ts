@@ -510,6 +510,7 @@ export const firestore = {
         role: data.role,
         created_at: toIsoString(data.created_at),
         account_status: normalizeAccountStatus(data.account_status),
+      approved: data.approved === true,
       }
     })
 
@@ -542,6 +543,7 @@ export const firestore = {
       role: data.role,
       created_at: toIsoString(data.created_at),
       account_status: normalizeAccountStatus(data.account_status),
+      approved: data.approved === true,
     }
   },
 
@@ -567,6 +569,7 @@ export const firestore = {
       uid: payload.uid.trim(),
       username: payload.username.trim(),
       role: payload.role,
+      approved: false,
       created_at,
     }
 
@@ -583,6 +586,7 @@ export const firestore = {
     const updatePayload = stripUndefinedValues({
       ...(typeof payload.username === 'string' ? { username: payload.username.trim() } : {}),
       ...(payload.role ? { role: payload.role } : {}),
+      ...(typeof payload.approved === 'boolean' ? { approved: payload.approved } : {}),
     })
 
     try {

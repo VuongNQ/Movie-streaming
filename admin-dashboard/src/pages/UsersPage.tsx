@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import {
   useCreateUser,
+  useProvisionUser,
   useDeleteAuthUser,
   useGeneratePasswordResetLink,
   useSetUserDisabled,
@@ -33,6 +34,8 @@ const defaultCreateState = {
 export function UsersPage() {
   const { data, isLoading, error } = useUsers()
   const createUser = useCreateUser()
+  const provisionUser = useProvisionUser()
+  const [newAccount, setNewAccount] = useState({ email: '', password: '', username: '', role: 'user' as 'user' | 'guest' })
   const deleteAuthUser = useDeleteAuthUser()
   const setUserDisabled = useSetUserDisabled()
   const generatePasswordResetLink = useGeneratePasswordResetLink()
@@ -40,7 +43,7 @@ export function UsersPage() {
   const [createForm, setCreateForm] = useState(defaultCreateState)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
-  const [editingState, setEditingState] = useState<{ username: string; role: UserRole }>({ username: '', role: 'user' })
+  const [editingState, setEditingState] = useState<{ username: string; role: UserRole; approved: boolean }>({ username: '', role: 'user', approved: false })
   const location = useLocation()
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -51,6 +54,18 @@ export function UsersPage() {
       role: createForm.role,
     })
     setCreateForm(defaultCreateState)
+    setShowCreateForm(false)
+  }
+
+  async function handleProvisionUser(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    await provisionUser.mutateAsync({
+      email: newAccount.email.trim(),
+      password: newAccount.password,
+      username: newAccount.username.trim(),
+      role: newAccount.role,
+    })
+    setNewAccount({ email: '', password: '', username: '', role: 'user' })
     setShowCreateForm(false)
   }
 
@@ -80,6 +95,7 @@ export function UsersPage() {
       payload: {
         username: editingState.username.trim(),
         role: editingState.role,
+        approved: editingState.approved,
       },
     })
     setEditingUserId(null)
@@ -98,9 +114,9 @@ export function UsersPage() {
     }
   }
 
-  function startEditing(userId: string, username: string, role: UserRole): void {
+  function startEditing(userId: string, username: string, role: UserRole, approved: boolean): void {
     setEditingUserId(userId)
-    setEditingState({ username, role })
+    setEditingState({ username, role, approved })
   }
 
   if (isLoading) {
@@ -112,6 +128,7 @@ export function UsersPage() {
   }
 
   const mutationError =
+    provisionUser.error ??
     createUser.error ??
     deleteAuthUser.error ??
     setUserDisabled.error ??
@@ -130,7 +147,49 @@ export function UsersPage() {
       {showCreateForm ? (
         <Card className="border-border/80 shadow-none">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Create user profile (manual auth)</CardTitle>
+            <CardTitle className="text-base">Create account</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <form className="grid gap-3 md:grid-cols-2" onSubmit={handleProvisionUser}>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-email">Email</Label>
+                <Input id="new-account-email" type="email" required value={newAccount.email}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, email: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-username">Username</Label>
+                <Input id="new-account-username" required value={newAccount.username}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, username: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-password">Initial password</Label>
+                <Input id="new-account-password" type="password" required minLength={6} autoComplete="new-password"
+                  value={newAccount.password}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, password: event.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-role">Role</Label>
+                <select id="new-account-role" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={newAccount.role}
+                  onChange={(event) => setNewAccount((current) => ({ ...current, role: event.target.value as 'user' | 'guest' }))}>
+                  <option value="user">user</option>
+                  <option value="guest">guest</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <Button type="submit" size="sm" disabled={provisionUser.isPending}>
+                  {provisionUser.isPending ? 'Creating...' : 'Create account pending approval'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showCreateForm ? (
+        <Card className="border-border/80 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Link an existing Firebase Auth account</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
             <form className="grid gap-3 md:grid-cols-3" onSubmit={handleCreateUser}>
@@ -195,6 +254,9 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{user.role}</Badge>
+                <Badge variant={user.approved || user.role === 'admin' ? 'secondary' : 'outline'}>
+                  {user.approved || user.role === 'admin' ? 'Approved' : 'Pending approval'}
+                </Badge>
                 <Badge variant={user.account_status === 'disabled' ? 'outline' : 'secondary'}>
                   {user.account_status ?? 'active'}
                 </Badge>
@@ -227,6 +289,11 @@ export function UsersPage() {
                     </select>
                   </div>
 
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={editingState.approved}
+                      onChange={(event) => setEditingState((current) => ({ ...current, approved: event.target.checked }))} />
+                    Allow access to movies
+                  </label>
                   <div className="md:col-span-2 flex flex-wrap items-center gap-2">
                     <Button type="button" size="sm" onClick={() => handleSaveUser(user.uid)} disabled={updateUser.isPending}>
                       {updateUser.isPending ? 'Saving...' : 'Save'}
@@ -250,7 +317,7 @@ export function UsersPage() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => startEditing(user.uid, user.username, user.role)}
+                  onClick={() => startEditing(user.uid, user.username, user.role, user.approved === true)}
                 >
                   Edit
                 </Button>

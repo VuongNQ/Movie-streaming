@@ -161,12 +161,12 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     private fun setupRelatedMovieListRow() {
         val subcategories = arrayOf(getString(R.string.related_movies))
-        val list = MovieList.list
-
+        val list = MovieList.remoteMovies.toMutableList()
+        if (list.isEmpty()) return
         Collections.shuffle(list)
         val listRowAdapter = ArrayObjectAdapter(CardPresenter())
         for (j in 0 until NUM_COLS) {
-            listRowAdapter.add(list[j % 5])
+            listRowAdapter.add(list[j % list.size])
         }
 
         val header = HeaderItem(0, subcategories[0])

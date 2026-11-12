@@ -42,6 +42,38 @@ async function assertAdminCaller(auth) {
   return auth.uid
 }
 
+exports.adminCreateUser = onCall(callableOptions, async (request) => {
+  await assertAdminCaller(request.auth)
+
+  const email = assertNonEmptyString(request.data?.email, 'email').toLowerCase()
+  const password = request.data?.password
+  if (typeof password !== 'string' || password.length < 6) {
+    throw new HttpsError('invalid-argument', 'Password must contain at least 6 characters.')
+  }
+  const username = assertNonEmptyString(request.data?.username, 'username')
+  const role = request.data?.role
+  if (!['guest', 'user'].includes(role)) {
+    throw new HttpsError('invalid-argument', 'Role must be guest or user.')
+  }
+
+  const user = await getAuth().createUser({ email, password, displayName: username })
+  try {
+    await getDb().collection('users').doc(user.uid).create({
+      uid: user.uid,
+      username,
+      role,
+      approved: false,
+      account_status: 'active',
+      created_at: new Date().toISOString(),
+    })
+  } catch (error) {
+    await getAuth().deleteUser(user.uid)
+    throw new HttpsError('internal', 'Unable to create the user profile.', error.message)
+  }
+
+  return { uid: user.uid }
+})
+
 exports.adminSetUserDisabled = onCall(callableOptions, async (request) => {
   await assertAdminCaller(request.auth)
 
