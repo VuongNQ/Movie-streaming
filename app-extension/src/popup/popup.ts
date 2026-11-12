@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth/web-extension'
 import { doc, getDoc, getFirestore } from 'firebase/firestore'
 import type { CapturedLink, CrawlRuntimeResponse, DisplayMode, ExtensionState, MovieCrawlState, RuntimeResponse } from '../types'
 import './popup.css'
