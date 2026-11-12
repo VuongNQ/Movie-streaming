@@ -23,3 +23,33 @@ User have 3 type: guest, user, admin. Only support login by username and pass. O
 - App extension using vanilla JS. App extension is using for read link stream on web when a web play video, show link on UI and have action to copy that link.
 
 - App Android using Kotlin and android studio for dev, connect to firestore, prefer for build app for TV
+
+## Release the admin dashboard and Android TV APK
+
+Pushing a new `vX.Y.Z` tag runs the admin dashboard deployment and Android TV release in parallel. The APK is published as `movie-app-tv-vX.Y.Z.apk` in GitHub Releases. The tag sets the Android `versionName` to `X.Y.Z` and `versionCode` to `2 + X * 1000000 + Y * 1000 + Z`. Each component must be between 0 and 999 with no leading zeros. Use increasing versions for updates.
+
+### One-time repository setup
+
+1. In **Settings → Pages**, set **Source** to **GitHub Actions**. If the `github-pages` environment restricts deployment refs, add a **Tag** rule for `v*` under **Settings → Environments → github-pages**.
+2. In **Settings → Secrets and variables → Actions → Variables**, add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` from the Firebase web app config. Set `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_DATABASE_ID`, and `VITE_FIREBASE_FUNCTIONS_REGION` as needed. The dashboard defaults to the `moviestreaming` database and the `us-central1` Functions region. Add the Pages hostname to Firebase Authentication's authorized domains.
+3. In **Settings → Secrets and variables → Actions → Secrets**, add the following repository secrets.
+
+   | Secret | Value |
+   | --- | --- |
+   | `ANDROID_GOOGLE_SERVICES_JSON` | Raw contents of `google-services.json` for the Firebase Android app registered as `com.example.movieapptv` |
+   | `ANDROID_KEYSTORE_BASE64` | Base64-encoded release keystore file |
+   | `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+   | `ANDROID_KEY_ALIAS` | Signing key alias |
+   | `ANDROID_KEY_PASSWORD` | Signing key password |
+
+   To update an existing installation, use the same signing key as its installed APK. Keep that key for future releases.
+
+### Publish a version
+
+After merging the workflow, tag the commit you want to release. For example, to release the current `main` as `v1.0.0`:
+
+```bash
+git fetch origin main
+git tag -a v1.0.0 origin/main -m "Release v1.0.0"
+git push origin refs/tags/v1.0.0
+```
