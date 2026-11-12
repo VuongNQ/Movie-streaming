@@ -1,0 +1,164 @@
+name: Release admin and Android TV
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.event.created && !github.event.deleted
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.tag.outputs.name }}
+      code: ${{ steps.tag.outputs.code }}
+    steps:
+      - name: Read release version
+        id: tag
+        shell: bash
+        run: |
+          if [[ ! $GITHUB_REF_NAME =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]]; then
+            echo '::error::Use a vX.Y.Z tag with each component between 0 and 999 and no leading zeros.'
+            exit 1
+          fi
+          code=$((2 + BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3]))
+          echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  build-admin:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@v5
+        id: pages
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: admin-dashboard/package-lock.json
+      - name: Build admin dashboard
+        working-directory: admin-dashboard
+        shell: bash
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          VITE_GITHUB_PAGES: 'true'
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_DATABASE_ID: ${{ vars.VITE_FIREBASE_DATABASE_ID }}
+          VITE_FIREBASE_FUNCTIONS_REGION: ${{ vars.VITE_FIREBASE_FUNCTIONS_REGION }}
+        run: |
+          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do
+            if [[ -z ${!name} ]]; then
+              echo "::error::Set the $name repository variable before deploying."
+              exit 1
+            fi
+          done
+          npm ci
+          npm run build -- --base "${PAGES_BASE_PATH%/}/"
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: admin-dashboard/dist
+
+  deploy-admin:
+    needs: build-admin
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
+  release-apk:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: android-app-tv
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Install Android SDK packages
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+      - name: Build release APK
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+          VERSION_CODE: ${{ needs.version.outputs.code }}
+        run: |
+          if [[ -z $GOOGLE_SERVICES_JSON ]]; then
+            echo '::error::Set the ANDROID_GOOGLE_SERVICES_JSON repository secret.'
+            exit 1
+          fi
+          printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          unset GOOGLE_SERVICES_JSON
+          trap 'rm -f app/google-services.json' EXIT
+          bash gradlew :app:assembleRelease "-PreleaseVersionName=$VERSION_NAME" "-PreleaseVersionCode=$VERSION_CODE"
+      - name: Sign and verify APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z ${!name} ]]; then
+              echo "::error::Set the $name repository secret before signing."
+              exit 1
+            fi
+          done
+          keystore=$(mktemp)
+          aligned=$(mktemp)
+          trap 'rm -f "$keystore" "$aligned"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          unset ANDROID_KEYSTORE_BASE64
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          apk="$RUNNER_TEMP/movie-app-tv-$GITHUB_REF_NAME.apk"
+          "$tools/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$aligned"
+          "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --out "$apk" "$aligned"
+          "$tools/apksigner" verify "$apk"
+      - name: Publish APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="movie-app-tv-$GITHUB_REF_NAME.apk"
+          if assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name'); then
+            if ! grep -Fxq "$asset" <<< "$assets"; then
+              gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/$asset"
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/$asset" --verify-tag --generate-notes
+          fi
