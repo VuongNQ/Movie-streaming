@@ -39,5 +39,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.leanback)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.auth)
     implementation(libs.glide)
 }

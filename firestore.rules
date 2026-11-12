@@ -22,6 +22,12 @@ service cloud.firestore {
       return userRole() == 'admin';
     }
 
+    function isApproved() {
+      return hasUserDoc() &&
+        (userRole() == 'admin' || get(userDocPath()).data.get('approved', false) == true) &&
+        get(userDocPath()).data.get('account_status', 'active') == 'active';
+    }
+
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
@@ -150,13 +156,13 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow get: if isAdmin() || (isSignedIn() && resource.data.reported_by_uid == request.auth.uid);
       allow list: if isAdmin();
-      allow create: if isSignedIn() && isValidReportCreate(request.resource.data);
+      allow create: if isApproved() && isValidReportCreate(request.resource.data);
       allow update: if isAdmin() && isValidReportUpdate(request.resource.data, resource.data);
       allow delete: if isAdmin();
     }
 
     match /movies/{movieId} {
-      allow get, list: if true;
+      allow get, list: if isApproved();
       allow create: if isAdmin() &&
         isMovieDocumentIdAligned(movieId, request.resource.data) &&
         isValidMovieWrite(request.resource.data);
@@ -174,6 +180,7 @@ service cloud.firestore {
         isOwner(uid) &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.role in ['guest', 'user'] &&
+        request.resource.data.get('approved', false) == false &&
         request.resource.data.created_at is string
       );
 
@@ -181,6 +188,8 @@ service cloud.firestore {
         isOwner(uid) &&
         request.resource.data.uid == resource.data.uid &&
         request.resource.data.role == resource.data.role &&
+        request.resource.data.get('approved', false) == resource.data.get('approved', false) &&
+        request.resource.data.get('account_status', 'active') == resource.data.get('account_status', 'active') &&
         request.resource.data.created_at == resource.data.created_at &&
         hasOnlyUserSafeFields()
       );

@@ -90,6 +90,7 @@ describe('firestore.rules movies policy', () => {
         uid: 'user-1',
         username: 'user',
         role: 'user',
+        approved: true,
         created_at: '2026-05-24T00:00:00.000Z',
       })
       await setDoc(doc(adminDb, 'users/user-2'), {
@@ -99,6 +100,16 @@ describe('firestore.rules movies policy', () => {
         created_at: '2026-05-24T00:00:00.000Z',
       })
     })
+  })
+
+  it('requires approval to read movies', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'movies', 'movie-1'), buildMoviePayload('movie-1'))
+    })
+    await assertFails(getDocs(collection(testEnv.unauthenticatedContext().firestore(), 'movies')))
+    await assertFails(getDocs(collection(testEnv.authenticatedContext('user-2').firestore(), 'movies')))
+    await assertSucceeds(getDocs(collection(testEnv.authenticatedContext('user-1').firestore(), 'movies')))
+    await assertSucceeds(getDocs(collection(testEnv.authenticatedContext('admin-1').firestore(), 'movies')))
   })
 
   it('allows admin to create a movie with generated search keyword fields', async () => {

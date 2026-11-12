@@ -1,3 +1,6 @@
+import { initializeApp } from 'firebase/app'
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { doc, getDoc, getFirestore } from 'firebase/firestore'
 import type { CapturedLink, CrawlRuntimeResponse, DisplayMode, ExtensionState, MovieCrawlState, RuntimeResponse } from '../types'
 import './popup.css'
 
@@ -327,3 +330,50 @@ void refreshCrawlState()
 
 // Preserve explicit reference for potential debugging hooks without altering behavior.
 void currentState
+
+const firebaseApp = initializeApp({
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+})
+const extensionAuth = getAuth(firebaseApp)
+const extensionDb = getFirestore(firebaseApp, import.meta.env.VITE_FIREBASE_DATABASE_ID || 'moviestreaming')
+const loginForm = getRequiredElement<HTMLFormElement>('#loginForm')
+const authStatus = getRequiredElement<HTMLParagraphElement>('#authStatus')
+const authorizedContent = getRequiredElement<HTMLDivElement>('#authorizedContent')
+const logoutButton = getRequiredElement<HTMLButtonElement>('#logoutButton')
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const email = getRequiredElement<HTMLInputElement>('#loginEmail').value
+  const password = getRequiredElement<HTMLInputElement>('#loginPassword').value
+  try {
+    await signInWithEmailAndPassword(extensionAuth, email, password)
+  } catch (error) {
+    authStatus.textContent = error instanceof Error ? error.message : 'Sign-in failed'
+  }
+})
+logoutButton.addEventListener('click', () => void signOut(extensionAuth))
+onAuthStateChanged(extensionAuth, async (user) => {
+  authorizedContent.hidden = true
+  loginForm.hidden = Boolean(user)
+  logoutButton.hidden = !user
+  if (!user) {
+    authStatus.textContent = 'Sign in to access movie tools'
+    return
+  }
+  try {
+    const profile = await getDoc(doc(extensionDb, 'users', user.uid))
+    const data = profile.data()
+    const approved = data?.role === 'admin' || data?.approved === true
+    if (!approved || data?.account_status === 'disabled') {
+      authStatus.textContent = 'Waiting for account approval'
+      return
+    }
+    authStatus.textContent = `Signed in as ${user.email}`
+    authorizedContent.hidden = false
+  } catch (error) {
+    authStatus.textContent = error instanceof Error ? error.message : 'Unable to check access'
+  }
+})

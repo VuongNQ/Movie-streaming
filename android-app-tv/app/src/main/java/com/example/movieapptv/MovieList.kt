@@ -1,6 +1,7 @@
 package com.example.movieapptv
 
 object MovieList {
+    var remoteMovies: List<Movie> = emptyList()
     val MOVIE_CATEGORY = arrayOf(
         "Category Zero",
         "Category One",

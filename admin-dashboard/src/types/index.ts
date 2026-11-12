@@ -57,6 +57,7 @@ export interface User {
   username: string
   role: UserRole
   created_at: string
+  approved?: boolean
   account_status?: 'active' | 'disabled'
   device_count?: number
 }

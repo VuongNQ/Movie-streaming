@@ -40,7 +40,7 @@ export function UsersPage() {
   const [createForm, setCreateForm] = useState(defaultCreateState)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
-  const [editingState, setEditingState] = useState<{ username: string; role: UserRole }>({ username: '', role: 'user' })
+  const [editingState, setEditingState] = useState<{ username: string; role: UserRole; approved: boolean }>({ username: '', role: 'user', approved: false })
   const location = useLocation()
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -80,6 +80,7 @@ export function UsersPage() {
       payload: {
         username: editingState.username.trim(),
         role: editingState.role,
+        approved: editingState.approved,
       },
     })
     setEditingUserId(null)
@@ -98,9 +99,9 @@ export function UsersPage() {
     }
   }
 
-  function startEditing(userId: string, username: string, role: UserRole): void {
+  function startEditing(userId: string, username: string, role: UserRole, approved: boolean): void {
     setEditingUserId(userId)
-    setEditingState({ username, role })
+    setEditingState({ username, role, approved })
   }
 
   if (isLoading) {
@@ -195,6 +196,9 @@ export function UsersPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{user.role}</Badge>
+                <Badge variant={user.approved || user.role === 'admin' ? 'secondary' : 'outline'}>
+                  {user.approved || user.role === 'admin' ? 'Approved' : 'Pending approval'}
+                </Badge>
                 <Badge variant={user.account_status === 'disabled' ? 'outline' : 'secondary'}>
                   {user.account_status ?? 'active'}
                 </Badge>
@@ -227,6 +231,11 @@ export function UsersPage() {
                     </select>
                   </div>
 
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={editingState.approved}
+                      onChange={(event) => setEditingState((current) => ({ ...current, approved: event.target.checked }))} />
+                    Allow access to movies
+                  </label>
                   <div className="md:col-span-2 flex flex-wrap items-center gap-2">
                     <Button type="button" size="sm" onClick={() => handleSaveUser(user.uid)} disabled={updateUser.isPending}>
                       {updateUser.isPending ? 'Saving...' : 'Save'}
@@ -250,7 +259,7 @@ export function UsersPage() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => startEditing(user.uid, user.username, user.role)}
+                  onClick={() => startEditing(user.uid, user.username, user.role, user.approved === true)}
                 >
                   Edit
                 </Button>
